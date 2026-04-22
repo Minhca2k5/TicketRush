@@ -1,0 +1,9 @@
+com\ticketrush\authservice\model\User$Role.class
+com\ticketrush\authservice\model\User.class
+com\ticketrush\authservice\model\User$Gender.class
+com\ticketrush\authservice\controller\AuthController.class
+com\ticketrush\authservice\repository\UserRepository.class
+com\ticketrush\authservice\controller\AuthController$LoginRequest.class
+com\ticketrush\authservice\service\AuthService.class
+com\ticketrush\authservice\AuthServiceApplication.class
+com\ticketrush\authservice\config\SecurityConfig.class
