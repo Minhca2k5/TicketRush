@@ -26,10 +26,10 @@ o AVAILABLE → LOCKED → SOLD / RELEASED - Background job: tự động releas
 - Thống kê doanh thu, tỷ lệ lấp đầy
 - Thống kê theo tuổi/giới tính
 - Nếu thiếu thời gian: có thể để aggregation trong booking - service
-2.2. Hạ tầng chung - Database: Dùng chung PostgreSQL với schema tách biệt cho đơn giản
-- Message Broker: Bỏ qua, dùng scheduler + DB polling
-- Realtime: Polling fallback trước, WebSocket nếu dư thời gian
-- DevOps: Docker Compose cho local dev
+2.2. Hạ tầng chung - Service Discovery: có thể bỏ qua để giảm độ phức tạp (dùng gateway + config tĩnh)
+- Database: mỗi service một DB là lý tưởng; nếu gặp có thể dùng chung PostgreSQL
+nhưng tách schema - Message Broker: tùy chọn; nếu không kịp thì dùng scheduler + DB polling
+- Realtime: WebSocket cho seat map & dashboard, fallback polling nếu cần
 2.3. Công nghệ gợi ý Backend: - Spring Boot
 - Spring Security
 - Spring Data JPA
@@ -40,7 +40,6 @@ Frontend: - React.js + Vite
 - React Router
 - Axios
 - Zustand / Redux Toolkit
-
 - Tailwind CSS / Material UI
 DevOps local: - Docker Compose (PostgreSQL, Redis nếu cần queue tạm)
 3. Nguyên tắc chia việc
@@ -59,8 +58,8 @@ Việc chung - Chốt domain model:
 o User, Event, SeatSection, Seat, SeatLock, Order, Ticket, QueueEntry
 
 - Thiết kế sequence:
-o Xem sự kiện o Giữ ghế o Hết hạn lock o Checkout o Waiting room - Tạo cấu trúc monorepo trong repo chính:
-o eventhaven - ui/ o event - service/ o auth - service/ o booking - service/ o api - gateway/ o queue - service/ - Chốt convention: branch, commit, API format, error format
+o Xem sự kiện o Giữ ghế o Hết hạn lock o Checkout o Waiting room - Tạo repo:
+o eventhaven - ui o event - service o auth - service o booking - service o api - gateway o queue - service - Chốt convention: branch, commit, API format, error format
 Người 1 Backend - Khởi tạo auth - service
 - User schema + JWT + role ADMIN/CUSTOMER
 - Khởi tạo API Gateway routing
@@ -92,11 +91,12 @@ Milestone Tuần 1 - Login chạy được
 - Danh sách sự kiện hiển thị
 - Seat map tĩnh hiển thị
 - Tất cả service chạy qua gateway
-Tuần 2: 20/04/2026 - 26/04/2026 Mục tiêu - Hoàn thiện seat selection cơ bản
-- Locking đơn giản (không cần concurrency cao ngay)
+Tuần 2: 20/04/2026 - 26/04/2026 Mục tiêu - Hoàn thiện seat selection thật
+- Transaction + locking
 - Admin tạo seat matrix
-Việc chung - Chốt locking strategy cơ bản (dùng DB lock hoặc optimistic locking)
-- Test manual locking
+Việc chung - Chốt locking strategy:
+o SELECT ... FOR UPDATE / PESSIMISTIC_WRITE - Đảm bảo 1 ghế chỉ được lock bởi 1 user
+- Test concurrency
 - Chốt API contract frontend/backend
 Người 1 Backend - Auth filter gateway hoàn chỉnh
 - Profile API
@@ -119,11 +119,11 @@ Milestone - Chọn ghế thật hoạt động
 - Admin tạo event + seat matrix
 Tuần 3: 27/04/2026 - 03/05/2026 Mục tiêu
 
-- Ticket lifecycle hoàn chỉnh (checkout + QR)
-- Realtime update cơ bản (polling)
-- Dashboard tối thiểu
-Việc chung - Chốt realtime: Polling 5s fallback, WebSocket nếu dư thời gian
-- Scheduler release lock 30s
+- Ticket lifecycle hoàn chỉnh
+- Realtime update
+- QR ticket + dashboard cơ bản
+Việc chung - Chốt realtime:
+o WebSocket ưu tiên o Polling fallback 3 – 5s - Scheduler release lock 30 – 60s
 - Seed data
 Người 1 Backend - Profile mở rộng (tuổi, giới tính)
 - API cho dashboard
@@ -142,11 +142,11 @@ Frontend - Checkout UI hoàn chỉnh
 - Danh sách vé
 Milestone - Full flow:
 o chọn ghế → lock → checkout → QR ticket - Realtime seat update hoạt động
-Tuần 4: 04/05/2026 - 10/05/2026 Mục tiêu - Virtual queue cơ bản (nếu kịp)
+Tuần 4: 04/05/2026 - 10/05/2026 Mục tiêu - Virtual queue
 - Dashboard hoàn chỉnh
 - Test & fix bug
-Việc chung - Xác định điều kiện vào waiting room (nếu implement queue)
-- Test concurrency nhẹ
+Việc chung - Xác định điều kiện vào waiting room
+- Stress test concurrency
 - Fix UI/UX
 - Freeze scope
 
@@ -194,24 +194,24 @@ Người 3 - Booking service
 - Queue service
 - Checkout
 - Waiting room UI
-6. Tính năng theo ưu tiên
-P0 (bắt buộc cho demo) - Login/Register + role
+6. Tính năng bắt buộc
+P0 (bắt buộc) - Login/Register + role
 - Admin tạo event + seat matrix
 - Xem seat map
 - Lock seat không trùng
+
 - Checkout + ticket
 - Release lock timeout
 - QR ticket
-P1 (nên có nếu kịp) - Realtime update (polling)
-- Virtual queue cơ bản
-- Dashboard với thống kê cơ bản
+- Realtime update
+P1 (nên có) - Virtual queue
+- Dashboard cơ bản
 - Seed data đẹp
 - Logging tốt
 P2 (nếu còn thời gian) - Email
 - Lịch sử đơn
 - Search nâng cao
 - UI mobile
-- WebSocket realtime
 7. Definition of Done
 Một task hoàn thành khi: - Code backend + frontend xong
 - Test local OK
@@ -224,7 +224,7 @@ Một task hoàn thành khi: - Code backend + frontend xong
 - Chủ nhật: demo nội bộ
 
 9. Rủi ro
-Rủi ro 1: Kiến trúc hybrid vẫn phức tạp → Fallback to full monolith nếu cần Rủi ro 2: Locking + concurrency khó → Test manual trước, stress test sau Rủi ro 3: Realtime/Queue không kịp → Ưu tiên polling thay WebSocket, bỏ queue nếu thiếu thời gian 10. Kịch bản demo
+Rủi ro 1: Microservices quá nặng → Giảm service, có thể gộp Rủi ro 2: Realtime khó debug → Ưu tiên locking trước, realtime sau Rủi ro 3: Queue không kịp → Giản lược queue thành polling đơn giản 10. Kịch bản demo
 1. Admin tạo event
 2. 2 customer vào cùng lúc
 3. Tranh chấp ghế VIP - A1

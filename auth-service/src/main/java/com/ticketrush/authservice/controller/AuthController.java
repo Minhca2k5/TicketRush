@@ -37,6 +37,28 @@ public class AuthController {
         }
     }
 
+    @GetMapping("/profile")
+    public ResponseEntity<?> getProfile(@RequestHeader("Authorization") String authHeader) {
+        try {
+            String token = authHeader.replace("Bearer ", "");
+            User user = authService.getProfile(token);
+            return ResponseEntity.ok(Map.of("success", true, "data", user));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/profile")
+    public ResponseEntity<?> updateProfile(@RequestHeader("Authorization") String authHeader, @RequestBody User updates) {
+        try {
+            String token = authHeader.replace("Bearer ", "");
+            User updatedUser = authService.updateProfile(token, updates);
+            return ResponseEntity.ok(Map.of("success", true, "data", updatedUser));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
     public static class LoginRequest {
         private String username;
         private String password;
