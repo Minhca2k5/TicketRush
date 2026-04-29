@@ -1,0 +1,76 @@
+.seat-map {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.zone-section {
+  border: 1px solid #ddd;
+  padding: 15px;
+  border-radius: 8px;
+  background-color: #f9f9f9;
+}
+
+.zone-section h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 18px;
+}
+
+.seats-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.seat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.row-label {
+  width: 25px;
+  font-weight: bold;
+  text-align: center;
+  color: #555;
+}
+
+.seat {
+  width: 45px;
+  height: 45px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #bbb;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: default;
+  transition: transform 0.1s;
+}
+
+.seat-available {
+  background-color: #4caf50;
+  color: white;
+  border-color: #388e3c;
+}
+
+.seat-available:hover {
+  transform: scale(1.05);
+  cursor: pointer;
+}
+
+.seat-sold {
+  background-color: #f44336;
+  color: white;
+  border-color: #d32f2f;
+  cursor: not-allowed;
+}
+
+.seat-locked {
+  background-color: #ff9800;
+  color: white;
+  border-color: #f57c00;
+}
