@@ -31,3 +31,6 @@ spring:
             - Path=/queue/**
           filters:
             - StripPrefix=1
+
+jwt:
+  secret: mySecretKey

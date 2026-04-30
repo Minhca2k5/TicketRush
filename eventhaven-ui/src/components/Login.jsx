@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8081';
+const API_BASE_URL = 'http://localhost:8080'; // Use gateway
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -11,13 +11,26 @@ const Login = () => {
     try {
       const response = await axios.post(`${API_BASE_URL}/auth/login`, { username, password });
       if (response.data.success) {
-        localStorage.setItem('token', response.data.data.token);
+        const token = response.data.data.token;
+        localStorage.setItem('token', token);
+
+        // Fetch profile to get role
+        const profileResponse = await axios.get(`${API_BASE_URL}/auth/profile`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const user = profileResponse.data.data;
+        localStorage.setItem('role', user.role);
+
         alert('Login successful');
-        // Redirect to home
-        window.location.href = '/';
+        // Redirect based on role
+        if (user.role === 'ADMIN') {
+          window.location.href = '/admin';
+        } else {
+          window.location.href = '/';
+        }
       }
     } catch (error) {
-      alert(error.response.data.error);
+      alert(error.response?.data?.error || 'Login failed');
     }
   };
 
