@@ -1,3 +1,8 @@
+import { BrowserRouter as Router } from 'react-router-dom';
+import { Header } from './components/Header';
+import { Sidebar } from './components/Sidebar';
+import { AppRoutes } from './AppRoutes';
+import './App.css';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Login from './components/Login';
 import Register from './components/Register';
@@ -21,6 +26,15 @@ const ProtectedRoute = ({ children, role }) => {
 function App() {
   return (
     <Router>
+      <div className="app-layout">
+        <Header />
+        <div className="app-body">
+          <Sidebar />
+          <main className="main-content">
+            <AppRoutes />
+          </main>
+        </div>
+      </div>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />

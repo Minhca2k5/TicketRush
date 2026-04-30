@@ -1,6 +1,49 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Seat color variants */
+.seat-available {
+  background-color: #22c55e;
+  color: white;
+}
+.seat-available:hover {
+  background-color: #16a34a;
+  cursor: pointer;
+}
+
+.seat-selected {
+  background-color: #3b82f6;
+  color: white;
+  transform: scale(1.05);
+  box-shadow: 0 0 0 2px #3b82f6, 0 0 0 4px white;
+}
+
+.seat-sold {
+  background-color: #ef4444;
+  color: white;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.seat-locked {
+  background-color: #f97316;
+  color: white;
+  cursor: not-allowed;
+}
+
+/* Custom scrollbar for cart items */
+.cart-items::-webkit-scrollbar {
+  width: 6px;
+}
+.cart-items::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+.cart-items::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+.cart-items::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
 }

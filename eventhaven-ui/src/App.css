@@ -1,0 +1,33 @@
+.app-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f8fafc;
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  margin-top: 64px; /* header height */
+}
+
+.main-content {
+  flex: 1;
+  margin-left: 240px; /* sidebar width */
+  padding: 1.5rem;
+  min-height: calc(100vh - 64px);
+  transition: margin-left 0.3s ease;
+}
+
+@media (max-width: 1024px) {
+  .main-content {
+    margin-left: 64px; /* collapsed sidebar */
+  }
+}
+
+@media (max-width: 768px) {
+  .main-content {
+    margin-left: 0;
+    padding: 1rem;
+  }
+}
