@@ -42,6 +42,28 @@ public class EventService {
                 .collect(Collectors.toList());
     }
 
+    public DashboardSummaryDTO getDashboardSummary() {
+        List<Seat> seats = seatRepository.findAll();
+        long soldSeats = seats.stream().filter(seat -> "SOLD".equalsIgnoreCase(seat.getStatus())).count();
+        long lockedSeats = seats.stream().filter(seat -> "LOCKED".equalsIgnoreCase(seat.getStatus())).count();
+        long availableSeats = seats.stream().filter(seat -> "AVAILABLE".equalsIgnoreCase(seat.getStatus())).count();
+        double estimatedRevenue = seats.stream()
+                .filter(seat -> "SOLD".equalsIgnoreCase(seat.getStatus()))
+                .filter(seat -> seat.getPriceTier() != null && seat.getPriceTier().getPrice() != null)
+                .mapToDouble(seat -> seat.getPriceTier().getPrice())
+                .sum();
+
+        DashboardSummaryDTO dto = new DashboardSummaryDTO();
+        dto.setEventCount(eventRepository.count());
+        dto.setSeatCount(seats.size());
+        dto.setAvailableSeats(availableSeats);
+        dto.setLockedSeats(lockedSeats);
+        dto.setSoldSeats(soldSeats);
+        dto.setEstimatedRevenue(estimatedRevenue);
+        dto.setOccupancyRate(seats.isEmpty() ? 0 : (soldSeats * 100.0 / seats.size()));
+        return dto;
+    }
+
     public EventDTO updateEvent(Long id, EventDTO eventDTO) {
         Event event = eventRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Event not found"));

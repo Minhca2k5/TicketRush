@@ -1,6 +1,7 @@
 package com.ticketrush.authservice.controller;
 
 import com.ticketrush.authservice.dto.ApiResponse;
+import com.ticketrush.authservice.dto.AuthDashboardResponse;
 import com.ticketrush.authservice.dto.LoginResponse;
 import com.ticketrush.authservice.dto.UserResponse;
 import com.ticketrush.authservice.model.User;
@@ -43,6 +44,11 @@ public class AuthController {
         String token = authHeader.replace("Bearer ", "");
         User updatedUser = authService.updateProfile(token, updates);
         return ResponseEntity.ok(ApiResponse.success(new UserResponse(updatedUser)));
+    }
+
+    @GetMapping("/dashboard")
+    public ResponseEntity<ApiResponse<AuthDashboardResponse>> getDashboardSummary() {
+        return ResponseEntity.ok(ApiResponse.success(authService.getDashboardSummary()));
     }
 
     public static class LoginRequest {

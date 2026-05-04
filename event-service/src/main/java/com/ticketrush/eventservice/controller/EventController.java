@@ -2,6 +2,7 @@ package com.ticketrush.eventservice.controller;
 
 import com.ticketrush.eventservice.dto.EventDTO;
 import com.ticketrush.eventservice.dto.EventSummaryDTO;
+import com.ticketrush.eventservice.dto.DashboardSummaryDTO;
 import com.ticketrush.eventservice.dto.SeatDTO;
 import com.ticketrush.eventservice.dto.SeatCreationRequest;
 import com.ticketrush.eventservice.service.EventService;
@@ -26,6 +27,11 @@ public class EventController {
     @GetMapping
     public List<EventSummaryDTO> getAllEvents() {
         return eventService.getAllEvents();
+    }
+
+    @GetMapping("/dashboard")
+    public DashboardSummaryDTO getDashboardSummary() {
+        return eventService.getDashboardSummary();
     }
 
     @GetMapping("/{id}")

@@ -69,7 +69,7 @@ public class DataSeeder implements CommandLineRunner {
             for (int num = 1; num <= 5; num++) {
                 Seat seat = new Seat();
                 seat.setSeatNumber("" + row + num);
-                seat.setStatus("AVAILABLE");
+                seat.setStatus(row == 'A' && num <= 2 ? "SOLD" : "AVAILABLE");
                 seat.setEvent(savedEvent);
                 seat.setVenueZone(vipZone);
                 seat.setPriceTier(vipPrice);
@@ -83,7 +83,7 @@ public class DataSeeder implements CommandLineRunner {
             for (int num = 1; num <= 10; num++) {
                 Seat seat = new Seat();
                 seat.setSeatNumber("" + row + num);
-                seat.setStatus("AVAILABLE");
+                seat.setStatus(row == 'F' && num <= 3 ? "LOCKED" : "AVAILABLE");
                 seat.setEvent(savedEvent);
                 seat.setVenueZone(standardZone);
                 seat.setPriceTier(standardPrice);

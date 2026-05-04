@@ -103,6 +103,143 @@
   line-height: 1.5;
 }
 
+.admin-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.admin-metric {
+  display: grid;
+  gap: 0.4rem;
+  padding: 1.25rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+}
+
+.admin-metric span {
+  color: #64748b;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.admin-metric strong {
+  color: #0f172a;
+  font-size: 1.75rem;
+  line-height: 1.1;
+}
+
+.dashboard-error {
+  padding: 0.875rem 1rem;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.profile-page {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 880px;
+}
+
+.profile-header {
+  padding: 2rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+}
+
+.profile-header span {
+  color: #14b8a6;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 0.8125rem;
+}
+
+.profile-header h1 {
+  margin: 0.5rem 0;
+  color: #0f172a;
+  font-size: 2rem;
+  letter-spacing: 0;
+}
+
+.profile-header p {
+  margin: 0;
+  color: #64748b;
+}
+
+.profile-form {
+  display: grid;
+  gap: 1.25rem;
+  padding: 1.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.profile-grid label {
+  display: grid;
+  gap: 0.45rem;
+  color: #334155;
+  font-weight: 700;
+}
+
+.profile-grid input,
+.profile-grid select {
+  height: 42px;
+  padding: 0 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #0f172a;
+  background: white;
+}
+
+.profile-grid input:disabled {
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.profile-submit {
+  justify-self: start;
+  height: 42px;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 8px;
+  background: #14b8a6;
+  color: white;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.profile-submit:hover {
+  background: #0f766e;
+}
+
+.profile-alert {
+  padding: 0.75rem 0.875rem;
+  border-radius: 8px;
+}
+
+.profile-alert.error {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.profile-alert.success {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
 @media (max-width: 1024px) {
   .main-content {
     margin-left: 64px; /* collapsed sidebar */
@@ -126,6 +263,11 @@
   }
 
   .admin-quick-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-metrics-grid,
+  .profile-grid {
     grid-template-columns: 1fr;
   }
 }

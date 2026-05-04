@@ -6,6 +6,7 @@ import { SeatSelector } from './SeatSelector';
 const EventDetail = () => {
   const { id } = useParams();
   const [event, setEvent] = useState(null);
+  const [seats, setSeats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -14,6 +15,7 @@ const EventDetail = () => {
       try {
         const res = await api.get(`/events/${id}`);
         setEvent(res.data);
+        setSeats(res.data.seats || []);
       } catch (err) {
         setError(err.response?.data?.message || 'Failed to fetch event');
       } finally {
@@ -22,6 +24,23 @@ const EventDetail = () => {
     };
     fetchEvent();
   }, [id]);
+
+  useEffect(() => {
+    if (!event) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(async () => {
+      try {
+        const response = await api.get(`/events/${id}/seats`);
+        setSeats(response.data || []);
+      } catch (err) {
+        console.warn('Seat polling failed', err);
+      }
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [event, id]);
 
   if (loading) return <div className="p-8 text-center">Loading event...</div>;
   if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
@@ -35,7 +54,7 @@ const EventDetail = () => {
         startTime: event.startTime,
         imageUrl: event.imageUrl,
       }}
-      initialSeats={event.seats || []}
+      seats={seats}
     />
   );
 };

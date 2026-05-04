@@ -6,6 +6,7 @@ import EventDetail from './components/EventDetail';
 import AdminEvents from './components/AdminEvents';
 import AdminDashboard from './components/AdminDashboard';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import Profile from './components/Profile';
 
 export function AppRoutes() {
   return (
@@ -14,6 +15,14 @@ export function AppRoutes() {
       <Route path="/register" element={<Register />} />
       <Route path="/" element={<Home />} />
       <Route path="/events/:id" element={<EventDetail />} />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <Profile />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/admin"
         element={

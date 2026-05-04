@@ -1,6 +1,7 @@
 package com.ticketrush.authservice.service;
 
 import com.ticketrush.authservice.model.User;
+import com.ticketrush.authservice.dto.AuthDashboardResponse;
 import com.ticketrush.authservice.repository.UserRepository;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.security.Key;
 import java.util.Date;
+import java.util.List;
 
 @Service
 public class AuthService {
@@ -90,5 +92,30 @@ public class AuthService {
         User saved = userRepository.save(user);
         logger.info("Profile updated for user: {}", userId);
         return saved;
+    }
+
+    public AuthDashboardResponse getDashboardSummary() {
+        List<User> users = userRepository.findAll();
+        long adminCount = users.stream().filter(user -> user.getRole() == User.Role.ADMIN).count();
+        long maleCount = users.stream().filter(user -> user.getGender() == User.Gender.M).count();
+        long femaleCount = users.stream().filter(user -> user.getGender() == User.Gender.F).count();
+        long completeProfiles = users.stream()
+                .filter(user -> user.getAge() != null && user.getGender() != null)
+                .count();
+        double averageAge = users.stream()
+                .filter(user -> user.getAge() != null)
+                .mapToInt(User::getAge)
+                .average()
+                .orElse(0);
+
+        AuthDashboardResponse response = new AuthDashboardResponse();
+        response.setUserCount(users.size());
+        response.setAdminCount(adminCount);
+        response.setCustomerCount(users.size() - adminCount);
+        response.setMaleCount(maleCount);
+        response.setFemaleCount(femaleCount);
+        response.setProfileCompletionCount(completeProfiles);
+        response.setAverageAge(averageAge);
+        return response;
     }
 }

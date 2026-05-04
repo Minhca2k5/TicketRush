@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { mapSeatsToType } from "@/lib/seat-types";
 import { EventHeader } from "./EventHeader";
 import { Stage } from "./Stage";
@@ -9,12 +9,22 @@ import { Legend } from "./Legend";
 import { BookingCart } from "./BookingCart";
 import { ShoppingCart, X, Check } from "lucide-react";
 
-export function SeatSelector({ event, initialSeats }) {
-  const [seats] = useState(() => mapSeatsToType(initialSeats));
+export function SeatSelector({ event, seats: backendSeats }) {
+  const [seats, setSeats] = useState(() => mapSeatsToType(backendSeats || []));
   const [selectedSeats, setSelectedSeats] = useState([]);
   const [timerStart, setTimerStart] = useState(null);
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [showBookingConfirm, setShowBookingConfirm] = useState(false);
+
+  useEffect(() => {
+    const mappedSeats = mapSeatsToType(backendSeats || []);
+    setSeats(mappedSeats);
+    setSelectedSeats((current) =>
+      current.filter((selected) =>
+        mappedSeats.some((seat) => seat.id === selected.id && seat.status === "AVAILABLE"),
+      ),
+    );
+  }, [backendSeats]);
 
   const handleSeatSelect = useCallback((seat) => {
     setSelectedSeats((prev) => {
