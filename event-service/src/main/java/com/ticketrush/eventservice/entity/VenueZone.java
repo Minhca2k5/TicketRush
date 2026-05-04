@@ -18,6 +18,10 @@ public class VenueZone {
     private String name;
     private String description;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "venue_id")
+    private Venue venue;
+
     @OneToMany(mappedBy = "venueZone", cascade = CascadeType.ALL)
     private List<Seat> seats;
 }

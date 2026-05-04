@@ -3,7 +3,7 @@ import api from '../services/api';
 
 const EMPTY_FORM = {
   name: '', description: '', startTime: '', endTime: '', imageUrl: '',
-  organizer: '',
+  organizer: '', category: '',
   venueMode: 'existing', // 'existing' | 'custom'
   venueId: '',
   customVenueName: '',
@@ -36,6 +36,7 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
   const [form, setForm] = useState(initial ? {
     ...EMPTY_FORM,
     ...initial,
+    category: initial.category || '',
     venueMode: 'existing',
     venueId: initial.venue?.id || '',
     tiers: initial.priceTiers?.map(t => ({
@@ -51,6 +52,8 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
   const [errors, setErrors] = useState({});
   const [venues, setVenues] = useState([]);
   const [zones, setZones] = useState([]);
+  const [creatingZone, setCreatingZone] = useState(false);
+  const [zoneDraft, setZoneDraft] = useState({ name: '', description: '' });
 
   useEffect(() => {
     api.get('/venues').then(res => {
@@ -76,11 +79,59 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
     ...f, tiers: [...f.tiers, { zoneId: '', tierName: '', price: '', rows: '', seatsPerRow: '', rowPrefix: 'R' }]
   }));
   const removeTier = (i) => setForm(f => ({ ...f, tiers: f.tiers.filter((_, j) => j !== i) }));
+  const setZoneField = (k, v) => setZoneDraft(d => ({ ...d, [k]: v }));
+
+  const createZoneInline = async () => {
+    if (form.venueMode !== 'existing' || !form.venueId) {
+      setErrors(e => ({ ...e, zoneDraftName: 'Select an existing venue before adding zones' }));
+      return;
+    }
+    if (!zoneDraft.name.trim()) {
+      setErrors(e => ({ ...e, zoneDraftName: 'Zone name is required' }));
+      return;
+    }
+
+    setCreatingZone(true);
+    try {
+      const payload = {
+        name: zoneDraft.name.trim(),
+        description: zoneDraft.description.trim(),
+      };
+      const created = await api.post(`/venues/${form.venueId}/zones`, payload);
+      const createdZone = created.data?.data || created.data;
+
+      const zonesRes = await api.get(`/venues/${form.venueId}/zones`);
+      const refreshedZones = zonesRes.data?.data || zonesRes.data || [];
+      setZones(refreshedZones);
+      setZoneDraft({ name: '', description: '' });
+      setErrors(e => {
+        const nextErrors = { ...e };
+        delete nextErrors.zoneDraftName;
+        return nextErrors;
+      });
+
+      setForm(f => {
+        const firstEmptyTierIndex = f.tiers.findIndex(t => !t.zoneId);
+        if (firstEmptyTierIndex === -1 || !createdZone?.id) return f;
+        const nextTiers = [...f.tiers];
+        nextTiers[firstEmptyTierIndex] = { ...nextTiers[firstEmptyTierIndex], zoneId: String(createdZone.id) };
+        return { ...f, tiers: nextTiers };
+      });
+    } catch (err) {
+      setErrors(e => ({
+        ...e,
+        zoneDraftName: err.response?.data?.message || 'Unable to create zone',
+      }));
+    } finally {
+      setCreatingZone(false);
+    }
+  };
 
   const validate = () => {
     const e = {};
     if (step === 1) {
       if (!form.name.trim()) e.name = 'Required';
+      if (!form.category.trim()) e.category = 'Required';
       if (!form.organizer.trim()) e.organizer = 'Required';
     }
     if (step === 2) {
@@ -192,7 +243,7 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
 
         {/* Step progress */}
         <div className="flex px-6 py-3 gap-2">
-          {['Basic Info', 'Venue & Media', 'Pricing & Seats'].map((s, i) => (
+          {['Basic Info', 'Media & Venue', 'Pricing & Seats'].map((s, i) => (
             <div key={i} className="flex-1 text-center">
               <div className={`h-1 rounded-full mb-1 ${step > i ? 'bg-violet-600' : 'bg-gray-200'}`} />
               <span className={`text-xs ${step === i + 1 ? 'text-violet-600 font-semibold' : 'text-gray-400'}`}>{s}</span>
@@ -209,6 +260,16 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
               <Field label="Event Title *" error={errors.name}>
                 <input className={inputCls(errors.name)} placeholder="e.g. Summer Music Festival" value={form.name} onChange={e => set('name', e.target.value)} />
               </Field>
+              <Field label="Category *" error={errors.category}>
+                <select className={inputCls(errors.category)} value={form.category} onChange={e => set('category', e.target.value)}>
+                  <option value="">Select category</option>
+                  <option value="Concert">Concert</option>
+                  <option value="Sport">Sport</option>
+                  <option value="Theater">Theater</option>
+                  <option value="Conference">Conference</option>
+                  <option value="General">General</option>
+                </select>
+              </Field>
               <Field label="Organizer *" error={errors.organizer}>
                 <input className={inputCls(errors.organizer)} placeholder="Organizer name" value={form.organizer} onChange={e => set('organizer', e.target.value)} />
               </Field>
@@ -221,6 +282,14 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
           {/* ── STEP 2 ── */}
           {step === 2 && (
             <>
+              <div className="rounded-2xl border border-dashed border-violet-200 bg-violet-50/50 p-4">
+                <p className="text-sm font-semibold text-slate-700">Event Banner / Media</p>
+                <p className="mt-1 text-xs text-slate-500">Use an image URL for now. The upload placeholder is ready to be connected to storage later.</p>
+                <div className="mt-3 flex min-h-[120px] items-center justify-center rounded-2xl border border-dashed border-violet-200 bg-white text-sm text-slate-400">
+                  Event banner upload placeholder
+                </div>
+              </div>
+
               {/* Venue mode toggle */}
               <div className="flex gap-2 p-1 bg-gray-100 rounded-xl">
                 <button type="button" onClick={() => set('venueMode', 'existing')}
@@ -285,6 +354,59 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
               <div className="flex items-center justify-between mb-1">
                 <p className="text-sm font-semibold text-gray-700">Ticket Tiers & Seat Layout</p>
                 <button onClick={addTier} className="text-xs font-semibold text-violet-600 hover:text-violet-800 transition">+ Add Tier</button>
+              </div>
+
+              <div className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">Seat Zones</p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Create sections like VIP, General, or Balcony without leaving this modal.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700">
+                    {zones.length} zone{zones.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[1.1fr_1.4fr_auto] md:items-end">
+                  <Field label="Zone Name *" error={errors.zoneDraftName}>
+                    <input
+                      className={inputCls(errors.zoneDraftName)}
+                      placeholder="e.g. VIP"
+                      value={zoneDraft.name}
+                      onChange={e => setZoneField('name', e.target.value)}
+                    />
+                  </Field>
+                  <Field label="Description">
+                    <input
+                      className={inputCls()}
+                      placeholder="Front section, balcony, standing area..."
+                      value={zoneDraft.description}
+                      onChange={e => setZoneField('description', e.target.value)}
+                    />
+                  </Field>
+                  <button
+                    type="button"
+                    onClick={createZoneInline}
+                    disabled={creatingZone || form.venueMode !== 'existing' || !form.venueId}
+                    className="h-[42px] rounded-xl border border-violet-200 bg-violet-600 px-4 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
+                  >
+                    {creatingZone ? 'Adding...' : 'Add Zone'}
+                  </button>
+                </div>
+
+                {form.venueMode === 'custom' && (
+                  <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    Inline zone creation works only with an existing venue. Custom venues are created when you save the event.
+                  </p>
+                )}
+
+                {form.venueMode === 'existing' && !form.venueId && (
+                  <p className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                    Select a venue in Step 2 first, then you can add zones here.
+                  </p>
+                )}
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700 mb-2">

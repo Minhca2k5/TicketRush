@@ -4,6 +4,7 @@ import Register from './components/Register';
 import Home from './components/Home';
 import EventDetail from './components/EventDetail';
 import AdminEvents from './components/AdminEvents';
+import AdminEventDetail from './components/AdminEventDetail';
 
 export function AppRoutes() {
   return (
@@ -13,6 +14,7 @@ export function AppRoutes() {
       <Route path="/" element={<Home />} />
       <Route path="/events/:id" element={<EventDetail />} />
       <Route path="/admin/events" element={<AdminEvents />} />
+      <Route path="/admin/events/:id" element={<AdminEventDetail />} />
     </Routes>
   );
 }

@@ -1,13 +1,12 @@
-package com.ticketrush.event_service;
+package com.ticketrush.eventservice;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
+@SpringBootTest(classes = EventServiceApplication.class)
 class EventServiceApplicationTests {
 
-	@Test
-	void contextLoads() {
-	}
-
+    @Test
+    void contextLoads() {
+    }
 }

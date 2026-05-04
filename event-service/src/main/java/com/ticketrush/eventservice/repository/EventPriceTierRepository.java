@@ -9,5 +9,5 @@ import java.util.UUID;
 
 @Repository
 public interface EventPriceTierRepository extends JpaRepository<EventPriceTier, UUID> {
-    List<EventPriceTier> findByEventId(UUID eventId);
+    List<EventPriceTier> findByEventId(Long eventId);
 }

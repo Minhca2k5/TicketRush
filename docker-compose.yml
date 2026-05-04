@@ -1,0 +1,69 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ticketrush
+      POSTGRES_USER: minh
+      POSTGRES_PASSWORD: minh123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U minh -d ticketrush"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  auth-service:
+    build:
+      context: ./auth-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ticketrush
+      SPRING_DATASOURCE_USERNAME: minh
+      SPRING_DATASOURCE_PASSWORD: minh123
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  event-service:
+    build:
+      context: ./event-service
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ticketrush
+      DB_USERNAME: minh
+      DB_PASSWORD: minh123
+    ports:
+      - "8082:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - "8080:8080"
+    depends_on:
+      auth-service:
+        condition: service_started
+      event-service:
+        condition: service_started
+
+  eventhaven-ui:
+    build:
+      context: ./eventhaven-ui
+    ports:
+      - "5173:80"
+    depends_on:
+      api-gateway:
+        condition: service_started
+
+volumes:
+  postgres_data:

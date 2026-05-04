@@ -66,7 +66,7 @@ public class VenueController {
             dto.setVenueId(z.getVenue().getId());
             dto.setName(z.getName());
             dto.setDescription(z.getDescription());
-            long seatCount = seatRepository.findByZoneId(z.getId()).size();
+            long seatCount = seatRepository.findByVenueZoneId(z.getId()).size();
             dto.setSeatCount((int) seatCount);
             return dto;
         }).collect(Collectors.toList());
@@ -97,7 +97,7 @@ public class VenueController {
     @org.springframework.transaction.annotation.Transactional
     public ResponseEntity<ApiResponse<Map<String, Object>>> configureSeats(
             @PathVariable UUID venueId,
-            @PathVariable UUID zoneId,
+            @PathVariable Long zoneId,
             @RequestBody Map<String, Object> body) {
 
         log.info("[VenueController] Configuring seats for venue={} zone={}", venueId, zoneId);
@@ -120,7 +120,7 @@ public class VenueController {
         seatsPerRow = Math.max(1, Math.min(seatsPerRow, 50));
 
         // Delete existing seats for this zone
-        List<Seat> existing = seatRepository.findByZoneId(zoneId);
+        List<Seat> existing = seatRepository.findByVenueZoneId(zoneId);
         log.info("[VenueController] Found {} existing seats to remove", existing.size());
         seatRepository.deleteAll(existing);
         seatRepository.flush(); // Force delete before insert to avoid constraint issues
@@ -130,11 +130,12 @@ public class VenueController {
         for (int r = 1; r <= rows; r++) {
             for (int s = 1; s <= seatsPerRow; s++) {
                 Seat seat = new Seat();
-                seat.setZone(zone);
+                seat.setVenueZone(zone);
                 seat.setRowName(rowPrefix + r);
-                seat.setSeatNumber(String.valueOf(s));
+                seat.setSeatNumber(rowPrefix + r + "-" + s);
                 seat.setCoordinateX(BigDecimal.valueOf(s * 15.0)); // Increased spacing for better UI
                 seat.setCoordinateY(BigDecimal.valueOf(r * 15.0));
+                seat.setStatus("AVAILABLE");
                 newSeats.add(seat);
             }
         }
