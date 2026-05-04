@@ -21,5 +21,12 @@ spring:
     locations: classpath:db/migration
 
 jwt:
-  secret: mySecretKey
+  secret: ticketrushJwtSecretKeyMustBeAtLeastThirtyTwoBytesLong2026
   expiration: 86400000  # 24 hours
+
+app:
+  seed:
+    admin:
+      username: admin
+      password: admin123
+      email: admin@ticketrush.local

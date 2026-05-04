@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const EVENT_API_BASE = 'http://localhost:8080/api';
+const EVENT_API_BASE = '/api';
 
 const api = axios.create({
   baseURL: EVENT_API_BASE,

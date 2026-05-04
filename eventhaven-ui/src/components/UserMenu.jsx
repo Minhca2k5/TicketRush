@@ -1,28 +1,29 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Settings, LogOut, ChevronDown } from 'lucide-react';
+import { clearAuth, getAuthRole, getAuthToken } from '../lib/auth';
 import './UserMenu.css';
 
-// Mock user - trong thực tế sẽ lấy từ API/auth
-const getMockUser = () => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    return {
-      id: 1,
-      name: 'Admin User',
-      email: 'admin@ticketrush.com',
-      avatar: null,
-      role: 'ADMIN',
-    };
+const getCurrentUser = () => {
+  const token = getAuthToken();
+  if (!token) {
+    return null;
   }
-  return null;
+
+  const role = getAuthRole() || 'CUSTOMER';
+  return {
+    name: role === 'ADMIN' ? 'Admin User' : 'Customer User',
+    email: role === 'ADMIN' ? 'admin@ticketrush.local' : 'customer@ticketrush.local',
+    avatar: null,
+    role,
+  };
 };
 
 export function UserMenu() {
   const [isOpen, setIsOpen] = useState(false);
-  const [user, setUser] = useState(getMockUser());
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
+  const user = getCurrentUser();
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -35,8 +36,7 @@ export function UserMenu() {
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    setUser(null);
+    clearAuth();
     setIsOpen(false);
     navigate('/login');
   };
@@ -51,7 +51,7 @@ export function UserMenu() {
   };
 
   if (!user) {
-    return null; // Header đã có Login/Register buttons
+    return null;
   }
 
   return (
@@ -89,9 +89,7 @@ export function UserMenu() {
               <div>
                 <p className="dropdown-user-name">{user.name}</p>
                 <p className="dropdown-user-email">{user.email}</p>
-                {user.role && (
-                  <span className="user-role-badge">{user.role}</span>
-                )}
+                <span className="user-role-badge">{user.role}</span>
               </div>
             </div>
           </div>

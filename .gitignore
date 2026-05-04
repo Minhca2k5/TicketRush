@@ -1,4 +1,5 @@
 /eventhaven-ui/node_modules
+/eventhaven-ui/dist
 .idea/
 .vscode/
 .kilocode/

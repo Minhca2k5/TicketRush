@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Ticket, Home, Calendar, Shield, Settings, HelpCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
+import { isAdmin } from '../lib/auth';
 import './Sidebar.css';
 
 export function Sidebar() {
@@ -14,7 +15,7 @@ export function Sidebar() {
 
   const mainNavItems = [
     { to: '/', label: 'Home', icon: Home },
-    ...(localStorage.getItem('token') ? [{ to: '/admin/events', label: 'Admin Panel', icon: Settings }] : []),
+    ...(isAdmin() ? [{ to: '/admin', label: 'Admin', icon: Shield }] : []),
   ];
 
   const bottomNavItems = [

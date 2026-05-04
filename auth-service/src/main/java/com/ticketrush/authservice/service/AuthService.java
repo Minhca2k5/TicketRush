@@ -35,7 +35,7 @@ public class AuthService {
             throw new RuntimeException("Username already exists");
         }
         user.setPassword(passwordEncoder.encode(user.getPassword()));
-        user.setRole(User.Role.CUSTOMER); // Default role
+        user.setRole(User.Role.CUSTOMER);
         User saved = userRepository.save(user);
         logger.info("User registered successfully: {}", saved.getId());
         return saved;

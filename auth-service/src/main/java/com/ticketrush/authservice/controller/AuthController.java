@@ -1,11 +1,13 @@
 package com.ticketrush.authservice.controller;
 
+import com.ticketrush.authservice.dto.ApiResponse;
+import com.ticketrush.authservice.dto.LoginResponse;
+import com.ticketrush.authservice.dto.UserResponse;
 import com.ticketrush.authservice.model.User;
 import com.ticketrush.authservice.service.AuthService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.Map;
 
 @RestController
 @RequestMapping("/auth")
@@ -18,45 +20,29 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody User user) {
-        try {
-            User savedUser = authService.register(user);
-            return ResponseEntity.ok(Map.of("success", true, "data", savedUser));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
-        }
+    public ResponseEntity<ApiResponse<UserResponse>> register(@Valid @RequestBody User user) {
+        User savedUser = authService.register(user);
+        return ResponseEntity.ok(ApiResponse.success(new UserResponse(savedUser)));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
-        try {
-            String token = authService.login(request.getUsername(), request.getPassword());
-            return ResponseEntity.ok(Map.of("success", true, "data", Map.of("token", token)));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
-        }
+    public ResponseEntity<ApiResponse<LoginResponse>> login(@RequestBody LoginRequest request) {
+        String token = authService.login(request.getUsername(), request.getPassword());
+        return ResponseEntity.ok(ApiResponse.success(new LoginResponse(token)));
     }
 
     @GetMapping("/profile")
-    public ResponseEntity<?> getProfile(@RequestHeader("Authorization") String authHeader) {
-        try {
-            String token = authHeader.replace("Bearer ", "");
-            User user = authService.getProfile(token);
-            return ResponseEntity.ok(Map.of("success", true, "data", user));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
-        }
+    public ResponseEntity<ApiResponse<UserResponse>> getProfile(@RequestHeader("Authorization") String authHeader) {
+        String token = authHeader.replace("Bearer ", "");
+        User user = authService.getProfile(token);
+        return ResponseEntity.ok(ApiResponse.success(new UserResponse(user)));
     }
 
     @PutMapping("/profile")
-    public ResponseEntity<?> updateProfile(@RequestHeader("Authorization") String authHeader, @RequestBody User updates) {
-        try {
-            String token = authHeader.replace("Bearer ", "");
-            User updatedUser = authService.updateProfile(token, updates);
-            return ResponseEntity.ok(Map.of("success", true, "data", updatedUser));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
-        }
+    public ResponseEntity<ApiResponse<UserResponse>> updateProfile(@RequestHeader("Authorization") String authHeader, @RequestBody User updates) {
+        String token = authHeader.replace("Bearer ", "");
+        User updatedUser = authService.updateProfile(token, updates);
+        return ResponseEntity.ok(ApiResponse.success(new UserResponse(updatedUser)));
     }
 
     public static class LoginRequest {

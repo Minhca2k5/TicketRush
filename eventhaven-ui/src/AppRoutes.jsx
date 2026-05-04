@@ -4,6 +4,8 @@ import Register from './components/Register';
 import Home from './components/Home';
 import EventDetail from './components/EventDetail';
 import AdminEvents from './components/AdminEvents';
+import AdminDashboard from './components/AdminDashboard';
+import { ProtectedRoute } from './components/ProtectedRoute';
 
 export function AppRoutes() {
   return (
@@ -12,7 +14,22 @@ export function AppRoutes() {
       <Route path="/register" element={<Register />} />
       <Route path="/" element={<Home />} />
       <Route path="/events/:id" element={<EventDetail />} />
-      <Route path="/admin/events" element={<AdminEvents />} />
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute requiredRole="ADMIN">
+            <AdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/events"
+        element={
+          <ProtectedRoute requiredRole="ADMIN">
+            <AdminEvents />
+          </ProtectedRoute>
+        }
+      />
     </Routes>
   );
 }

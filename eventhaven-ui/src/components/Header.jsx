@@ -4,16 +4,18 @@ import { useState } from 'react';
 import { SearchBar } from './SearchBar';
 import { NotificationBell } from './NotificationBell';
 import { UserMenu } from './UserMenu';
+import { clearAuth, getAuthRole, getAuthToken } from '../lib/auth';
 import './Header.css';
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
-  const token = localStorage.getItem('token');
+  const token = getAuthToken();
+  const role = getAuthRole();
 
   const navLinks = [
     { to: '/', label: 'Home', icon: Home },
-    ...(token ? [{ to: '/admin/events', label: 'Admin', icon: Shield }] : []),
+    ...(role === 'ADMIN' ? [{ to: '/admin', label: 'Admin', icon: Shield }] : []),
   ];
 
   const isActive = (path) => location.pathname === path;
@@ -49,6 +51,12 @@ export function Header() {
         {/* Right Actions */}
         <div className="header-actions">
           <NotificationBell />
+          {role === 'ADMIN' && (
+            <Link to="/admin" className="admin-shortcut">
+              <Shield className="nav-icon" />
+              <span>Admin</span>
+            </Link>
+          )}
           <UserMenu />
           {!token && (
             <div className="auth-buttons">
@@ -97,7 +105,7 @@ export function Header() {
               <button
                 className="mobile-nav-link logout"
                 onClick={() => {
-                  localStorage.removeItem('token');
+                  clearAuth();
                   window.location.href = '/';
                 }}
               >

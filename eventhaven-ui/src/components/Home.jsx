@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
+import { isAdmin } from '../lib/auth';
 import './Home.css';
 
 const Home = () => {
@@ -44,9 +45,11 @@ const Home = () => {
     <div className="home">
       <div className="home-header">
         <h1>Upcoming Events</h1>
-        <button className="admin-btn" onClick={() => navigate('/admin/events')}>
-          Admin Panel
-        </button>
+        {isAdmin() && (
+          <button className="admin-btn" onClick={() => navigate('/admin')}>
+            Admin
+          </button>
+        )}
       </div>
 
       {searchQuery && (
