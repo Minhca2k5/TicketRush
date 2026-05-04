@@ -20,6 +20,8 @@ spring:
             allowedHeaders:
               - "*"
             allowCredentials: true
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
       routes:
         - id: auth-service
           uri: http://localhost:8081
@@ -28,7 +30,7 @@ spring:
         - id: event-service
           uri: http://localhost:8082
           predicates:
-            - Path=/api/events/**
+            - Path=/api/**
         - id: booking-service
           uri: http://localhost:8083
           predicates:
@@ -37,6 +39,8 @@ spring:
           uri: http://localhost:8084
           predicates:
             - Path=/queue/**
+          filters:
+            - StripPrefix=1
 
 jwt:
   secret: ticketrushJwtSecretKeyMustBeAtLeastThirtyTwoBytesLong2026

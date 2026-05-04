@@ -4,9 +4,11 @@ import Register from './components/Register';
 import Home from './components/Home';
 import EventDetail from './components/EventDetail';
 import AdminEvents from './components/AdminEvents';
+import AdminEventDetail from './components/AdminEventDetail';
 import AdminDashboard from './components/AdminDashboard';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import Profile from './components/Profile';
+import TicketSalesPage from './pages/admin/TicketSalesPage';
 
 export function AppRoutes() {
   return (
@@ -32,10 +34,34 @@ export function AppRoutes() {
         }
       />
       <Route
+        path="/admin/dashboard"
+        element={
+          <ProtectedRoute requiredRole="ADMIN">
+            <AdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/admin/events"
         element={
           <ProtectedRoute requiredRole="ADMIN">
             <AdminEvents />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/events/:id"
+        element={
+          <ProtectedRoute requiredRole="ADMIN">
+            <AdminEventDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/sales"
+        element={
+          <ProtectedRoute requiredRole="ADMIN">
+            <TicketSalesPage />
           </ProtectedRoute>
         }
       />

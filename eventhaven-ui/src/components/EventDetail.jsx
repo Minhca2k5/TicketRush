@@ -1,62 +1,74 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import api from '../services/api';
 import { SeatSelector } from './SeatSelector';
+import { mapSeatLayoutToType, mapSeatsToType } from '@/lib/seat-types';
+import { getEventById, getSeatLayout, getSeatMap } from '../services/eventService';
 
-const EventDetail = () => {
+export default function EventDetail() {
   const { id } = useParams();
   const [event, setEvent] = useState(null);
-  const [seats, setSeats] = useState([]);
+  const [seatLayout, setSeatLayout] = useState(null);
+  const [seatInventory, setSeatInventory] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchEvent = async () => {
+    let ignore = false;
+
+    const load = async (isInitialLoad = false) => {
       try {
-        const res = await api.get(`/events/${id}`);
-        setEvent(res.data);
-        setSeats(res.data.seats || []);
-      } catch (err) {
-        setError(err.response?.data?.message || 'Failed to fetch event');
+        const eventPayload = await getEventById(id);
+
+        const [seatMapPayload, layoutPayload] = await Promise.all([
+          getSeatMap(id).catch(() => []),
+          getSeatLayout(id).catch(() => null),
+        ]);
+
+        if (!ignore) {
+          const mappedLayout = mapSeatLayoutToType(layoutPayload);
+          const mappedSeatMap = mapSeatsToType(Array.isArray(seatMapPayload) ? seatMapPayload : []);
+          setEvent(eventPayload);
+          setSeatLayout(mappedLayout.layout);
+          setSeatInventory(mappedSeatMap.length ? mappedSeatMap : mappedLayout.seats);
+        }
+      } catch {
+        if (!ignore) {
+          setEvent(null);
+          setSeatLayout(null);
+          setSeatInventory([]);
+        }
       } finally {
-        setLoading(false);
+        if (!ignore && isInitialLoad) {
+          setLoading(false);
+        }
       }
     };
-    fetchEvent();
+
+    load(true);
+
+    return () => {
+      ignore = true;
+    };
   }, [id]);
 
-  useEffect(() => {
-    if (!event) {
-      return undefined;
-    }
+  if (loading) {
+    return <div className="px-4 py-20 text-center text-slate-500">Loading booking experience...</div>;
+  }
 
-    const intervalId = window.setInterval(async () => {
-      try {
-        const response = await api.get(`/events/${id}/seats`);
-        setSeats(response.data || []);
-      } catch (err) {
-        console.warn('Seat polling failed', err);
-      }
-    }, 5000);
-
-    return () => window.clearInterval(intervalId);
-  }, [event, id]);
-
-  if (loading) return <div className="p-8 text-center">Loading event...</div>;
-  if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
-  if (!event) return null;
+  if (!event) {
+    return <div className="px-4 py-20 text-center text-red-500">Unable to load event.</div>;
+  }
 
   return (
     <SeatSelector
+      eventId={event.id || Number(id)}
       event={{
         name: event.name,
-        location: event.location,
+        location: event.location || event.venue?.name || event.venue?.address,
         startTime: event.startTime,
-        imageUrl: event.imageUrl,
+        imageUrl: event.bannerUrl || event.imageUrl,
       }}
-      seats={seats}
+      initialLayout={seatLayout}
+      initialSeats={seatInventory}
     />
   );
-};
-
-export default EventDetail;
+}

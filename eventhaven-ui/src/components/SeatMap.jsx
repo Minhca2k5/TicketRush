@@ -1,141 +1,86 @@
 import { useMemo } from "react";
-import { Seat } from "./Seat";
-import { cn } from "@/lib/utils";
+import { SeatZone } from "./SeatZone";
 
-export function SeatMap({ seats, selectedSeats, onSeatSelect }) {
-  const selectedIds = useMemo(
-    () => new Set(selectedSeats.map((s) => s.id)),
-    [selectedSeats]
-  );
+export function SeatMap({ seats, seatLayout, selectedSeats, onSeatSelect }) {
+  const selectedIds = useMemo(() => new Set(selectedSeats.map((seat) => seat.id)), [selectedSeats]);
 
-  const vipSeats = useMemo(
-    () => seats.filter((s) => s.zone === "VIP" || s.zone === "vip"),
-    [seats]
-  );
+  const groupedZones = useMemo(() => {
+    const seatLookup = new Map(seats.map((seat) => [seat.id, seat]));
 
-  const standardSeats = useMemo(
-    () => seats.filter((s) => s.zone === "Standard" || s.zone === "standard"),
-    [seats]
-  );
+    if (seatLayout?.zones?.length) {
+      return seatLayout.zones
+        .map((zone) => ({
+          zoneId: zone.zoneId,
+          zoneName: zone.zoneName,
+          zoneDescription: zone.zoneDescription,
+          tierName: zone.tierName,
+          price: zone.price,
+          rows: (zone.rows || [])
+            .map((row) => ({
+              rowName: row.rowName,
+              seats: (row.seats || [])
+                .map((seat) => seatLookup.get(seat.id))
+                .filter(Boolean)
+                .sort((first, second) => first.number - second.number),
+            }))
+            .filter((row) => row.seats.length),
+        }))
+        .filter((zone) => zone.rows.length);
+    }
 
-  const groupByRow = (seatList) => {
-    return seatList.reduce((acc, seat) => {
-      if (!acc[seat.row]) acc[seat.row] = [];
-      acc[seat.row].push(seat);
+    const zoneMap = seats.reduce((acc, seat) => {
+      const zoneName = seat.zone || "General";
+      if (!acc.has(zoneName)) {
+        acc.set(zoneName, { zoneId: zoneName, zoneName, rowsMap: new Map() });
+      }
+
+      const zone = acc.get(zoneName);
+      if (!zone.rowsMap.has(seat.row)) {
+        zone.rowsMap.set(seat.row, []);
+      }
+      zone.rowsMap.get(seat.row).push(seat);
       return acc;
-    }, {});
-  };
+    }, new Map());
 
-  const vipRows = groupByRow(vipSeats);
-  const standardRows = groupByRow(standardSeats);
-
-  return (
-    <div className="w-full max-w-3xl mx-auto space-y-8">
-      {/* VIP Section */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-center gap-2 mb-4">
-          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
-          <span className="px-4 py-1 bg-primary/20 text-primary text-xs font-semibold rounded-full uppercase tracking-wider">
-            VIP Zone
-          </span>
-          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
-        </div>
-
-        {Object.entries(vipRows).map(([row, rowSeats]) => (
-          <SeatRow
-            key={row}
-            row={row}
-            seats={rowSeats}
-            selectedIds={selectedIds}
-            onSeatSelect={onSeatSelect}
-            isVip
-          />
-        ))}
-      </div>
-
-      {/* Aisle divider */}
-      <div className="flex items-center justify-center gap-2">
-        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
-        <span className="px-4 py-1 text-muted-foreground text-xs uppercase tracking-wider">
-          Aisle
-        </span>
-        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
-      </div>
-
-      {/* Standard Section */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-center gap-2 mb-4">
-          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-secondary/50 to-transparent" />
-          <span className="px-4 py-1 bg-secondary/30 text-secondary-foreground text-xs font-semibold rounded-full uppercase tracking-wider">
-            Standard Zone
-          </span>
-          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-secondary/50 to-transparent" />
-        </div>
-
-        {Object.entries(standardRows).map(([row, rowSeats]) => (
-          <SeatRow
-            key={row}
-            row={row}
-            seats={rowSeats}
-            selectedIds={selectedIds}
-            onSeatSelect={onSeatSelect}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SeatRow({ row, seats, selectedIds, onSeatSelect, isVip }) {
-  const sortedSeats = [...seats].sort((a, b) => a.number - b.number);
-  const midpoint = Math.ceil(sortedSeats.length / 2);
-  const leftSeats = sortedSeats.slice(0, midpoint);
-  const rightSeats = sortedSeats.slice(midpoint);
+    return Array.from(zoneMap.values())
+      .map((zone) => ({
+        zoneId: zone.zoneId,
+        zoneName: zone.zoneName,
+        rows: Array.from(zone.rowsMap.entries())
+          .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+          .map(([rowName, rowSeats]) => ({
+            rowName,
+            seats: rowSeats.sort((first, second) => first.number - second.number),
+          })),
+      }))
+      .filter((zone) => zone.rows.length);
+  }, [seatLayout, seats]);
 
   return (
-    <div className="flex items-center justify-center gap-2 md:gap-4">
-      <span
-        className={cn(
-          "w-6 text-center text-sm font-semibold",
-          isVip ? "text-primary" : "text-muted-foreground"
-        )}
-      >
-        {row}
-      </span>
-
-      <div className="flex items-center gap-1">
-        {leftSeats.map((seat) => (
-          <Seat
-            key={seat.id}
-            seat={seat}
-            isSelected={selectedIds.has(String(seat.id))}
-            onSelect={onSeatSelect}
-          />
-        ))}
+    <div className="rounded-[28px] border border-white/70 bg-white/85 p-5 shadow-sm md:p-6">
+      <div className="mb-5">
+        <h3 className="text-lg font-bold text-slate-900">Interactive Seat Map</h3>
+        <p className="text-sm text-slate-500">Each section is grouped by zone and each row scrolls horizontally on smaller screens.</p>
       </div>
 
-      {/* Center aisle */}
-      <div className="w-4 md:w-8" />
-
-      <div className="flex items-center gap-1">
-        {rightSeats.map((seat) => (
-          <Seat
-            key={seat.id}
-            seat={seat}
-            isSelected={selectedIds.has(String(seat.id))}
-            onSelect={onSeatSelect}
-          />
-        ))}
-      </div>
-
-      <span
-        className={cn(
-          "w-6 text-center text-sm font-semibold",
-          isVip ? "text-primary" : "text-muted-foreground"
+      <div className="rounded-[24px] bg-[linear-gradient(180deg,#fafbff_0%,#f3f5ff_100%)] p-4 md:p-6">
+        {groupedZones.length ? (
+          <div className="flex flex-col gap-8">
+            {groupedZones.map((zone) => (
+              <SeatZone
+                key={zone.zoneId}
+                zone={zone}
+                selectedIds={selectedIds}
+                onSeatSelect={onSeatSelect}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-[22px] border border-dashed border-slate-200 bg-white/80 px-6 py-10 text-center text-sm text-slate-500">
+            Seat inventory is not available for this event yet.
+          </div>
         )}
-      >
-        {row}
-      </span>
+      </div>
     </div>
   );
 }

@@ -1,7 +1,13 @@
 package com.ticketrush.eventservice.entity;
 
 import jakarta.persistence.*;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "seats")
@@ -14,10 +20,17 @@ public class Seat {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String seatNumber; // Ví dụ: A1, B5
-
-    // Trạng thái ghế: AVAILABLE (Trống), LOCKED (Đang giữ), SOLD (Đã bán)
+    private String seatNumber;
+    private String rowName;
     private String status;
+    private String lockHolder;
+    private LocalDateTime lockExpiresAt;
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal coordinateX;
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal coordinateY;
 
     @ManyToOne
     @JoinColumn(name = "event_id")

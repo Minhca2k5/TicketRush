@@ -11,8 +11,14 @@ import java.time.LocalDateTime;
 public class EventSummaryDTO {
     private Long id;
     private String name;
+    private String category;
+    private String organizer;
     private String description;
     private String location;
     private LocalDateTime startTime;
+    private LocalDateTime endTime;
     private String imageUrl;
+    private String bannerUrl;
+    private String status;
+    private VenueDTO venue;
 }
