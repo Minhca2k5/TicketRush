@@ -7,11 +7,35 @@ export interface Seat {
   id: number;
   row: string;        // "A", "B", ...
   number: number;     // 1, 2, ...
+  seatLabel: string;
   zone: ZoneType;
   price: number;
   status: SeatStatus;
   lockHolder?: string | null;
   lockExpiresAt?: string | null;
+}
+
+function parseRowLabel(seatNumber: string, explicitRow?: string | null): string {
+  if (explicitRow && String(explicitRow).trim()) {
+    return String(explicitRow).trim();
+  }
+
+  const hyphenParts = seatNumber.split("-");
+  if (hyphenParts.length > 1 && hyphenParts[0]) {
+    return hyphenParts[0];
+  }
+
+  const matched = seatNumber.match(/^[A-Za-z]+/);
+  return matched?.[0] || seatNumber.charAt(0) || "A";
+}
+
+function parseSeatIndex(seatNumber: string): number {
+  const hyphenParts = seatNumber.split("-");
+  const raw = hyphenParts.length > 1
+    ? hyphenParts[hyphenParts.length - 1]
+    : seatNumber.replace(/^[^0-9]+/, "");
+  const parsed = parseInt(raw, 10);
+  return Number.isNaN(parsed) ? 1 : parsed;
 }
 
 export interface SeatZoneLayout {
@@ -58,12 +82,8 @@ export function normalizeSeatStatus(status: string | undefined | null): SeatStat
 export function mapSeatsToType(backendSeats: any[]): Seat[] {
   return backendSeats.map((s) => {
     const seatNumber = String(s.seatNumber || "");
-    const hyphenParts = seatNumber.split("-");
-    const row = s.rowName || hyphenParts[0] || seatNumber.charAt(0) || "A";
-    const parsedNumber = hyphenParts.length > 1
-      ? parseInt(hyphenParts[hyphenParts.length - 1], 10)
-      : parseInt(seatNumber.replace(/^[^0-9]+/, ""), 10);
-    const number = Number.isNaN(parsedNumber) ? 1 : parsedNumber;
+    const row = parseRowLabel(seatNumber, s.rowName);
+    const number = parseSeatIndex(seatNumber);
     const zone = s.venueZone?.name || "Standard";
     const price = s.priceTier?.price || 0;
     const status = normalizeSeatStatus(s.status);
@@ -71,6 +91,7 @@ export function mapSeatsToType(backendSeats: any[]): Seat[] {
       id: s.id,
       row,
       number,
+      seatLabel: seatNumber || `${row}${number}`,
       zone: zone as ZoneType,
       price,
       status,
@@ -104,14 +125,13 @@ export function mapSeatLayoutToType(layout: any): { layout: SeatLayoutSummary | 
     zone.rows.flatMap((row) =>
       row.seats.map((seat: any) => {
         const seatNumber = String(seat.seatNumber || "");
-        const hyphenParts = seatNumber.split("-");
-        const parsedNumber = hyphenParts.length > 1
-          ? parseInt(hyphenParts[hyphenParts.length - 1], 10)
-          : parseInt(seatNumber.replace(/^[^0-9]+/, ""), 10);
+        const rowName = row.rowName || parseRowLabel(seatNumber, seat.rowName);
+        const seatIndex = parseSeatIndex(seatNumber);
         return {
           id: seat.id,
-          row: row.rowName,
-          number: Number.isNaN(parsedNumber) ? 1 : parsedNumber,
+          row: rowName,
+          number: seatIndex,
+          seatLabel: seatNumber || `${rowName}${seatIndex}`,
           zone: zone.zoneName,
           price: Number(seat.priceTier?.price ?? zone.price ?? 0),
           status: normalizeSeatStatus(seat.status),
@@ -148,6 +168,7 @@ export function generateSeats(): Seat[] {
         id: r * 100 + n,
         row,
         number: n,
+        seatLabel: `${row}${n}`,
         zone: "VIP",
         price: 500000,
         status: "AVAILABLE",
@@ -164,6 +185,7 @@ export function generateSeats(): Seat[] {
         id: 500 + r * 100 + n,
         row,
         number: n,
+        seatLabel: `${row}${n}`,
         zone: "Standard",
         price: 200000,
         status: "AVAILABLE",

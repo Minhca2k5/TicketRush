@@ -16,16 +16,16 @@ import {
   Trash2,
   Users,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import EventFormModal from './EventFormModal';
 
 const PAGE_SIZE = 6;
 
 const sidebarMain = [
-  { label: 'Dashboard', icon: BarChart3 },
-  { label: 'Events Management', icon: CalendarDays, active: true },
-  { label: 'Ticket Sales', icon: Ticket },
+  { label: 'Dashboard', icon: BarChart3, to: '/admin/dashboard' },
+  { label: 'Events Management', icon: CalendarDays, to: '/admin/events' },
+  { label: 'Ticket Sales', icon: Ticket, to: '/admin/sales' },
   { label: 'Customer Database', icon: Users },
   { label: 'System Reports', icon: FileBarChart2 },
   { label: 'Admin Settings', icon: Settings },
@@ -117,9 +117,11 @@ function DeleteConfirmModal({ event, onCancel, onConfirm, deleting }) {
 }
 
 export default function AdminEvents() {
+  const location = useLocation();
   const navigate = useNavigate();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingEditor, setLoadingEditor] = useState(false);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [page, setPage] = useState(1);
@@ -156,10 +158,17 @@ export default function AdminEvents() {
   const normalizedEvents = useMemo(() => {
     return events.map((event, index) => {
       const progress = inferProgress(event, index);
+      const normalizedStatus = String(event.status || inferStatus(event.startTime)).trim().toUpperCase();
       return {
         ...event,
         category: event.category || inferCategory(event),
-        status: event.status || inferStatus(event.startTime),
+        status: normalizedStatus === 'LIVE'
+          ? 'Live'
+          : normalizedStatus === 'PENDING'
+            ? 'Pending'
+            : normalizedStatus === 'PAST'
+              ? 'Past'
+              : 'Draft',
         organizer: event.organizer || 'TicketRush Organizer',
         venueLabel: event.venue?.name || event.location || 'Venue TBD',
         progress,
@@ -191,12 +200,31 @@ export default function AdminEvents() {
       setToast({ type: 'success', message: 'Event deleted successfully.' });
       setDeleteTarget(null);
       await loadEvents();
-    } catch {
-      setEvents((previous) => previous.filter((event) => event.id !== deleteTarget.id));
-      setToast({ type: 'success', message: 'Event removed from the current admin list.' });
+    } catch (error) {
+      setToast({
+        type: 'warning',
+        message: error.response?.data?.message || 'Unable to delete this event right now.',
+      });
       setDeleteTarget(null);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleOpenEdit = async (eventId) => {
+    setLoadingEditor(true);
+    try {
+      const response = await api.get(`/events/${eventId}`);
+      const payload = response.data?.data || response.data;
+      setEditingEvent(payload);
+      setShowForm(true);
+    } catch (error) {
+      setToast({
+        type: 'warning',
+        message: error.response?.data?.message || 'Unable to load the selected event for editing.',
+      });
+    } finally {
+      setLoadingEditor(false);
     }
   };
 
@@ -217,18 +245,22 @@ export default function AdminEvents() {
           <div className="px-5 py-7">
             <p className="px-4 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Main</p>
             <div className="mt-4 space-y-2">
-              {sidebarMain.map(({ label, icon: Icon, active }) => (
-                <button
-                  key={label}
-                  type="button"
-                  className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
-                    active ? 'bg-violet-50 text-violet-700 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.35)]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                  }`}
-                >
-                  <Icon size={17} />
-                  <span>{label}</span>
-                </button>
-              ))}
+              {sidebarMain.map(({ label, icon: Icon, to }) => {
+                const isActive = to ? location.pathname.startsWith(to) : false;
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => to && navigate(to)}
+                    className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
+                      isActive ? 'bg-violet-50 text-violet-700 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.35)]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    }`}
+                  >
+                    <Icon size={17} />
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -425,12 +457,10 @@ export default function AdminEvents() {
                                   <Eye size={17} />
                                 </button>
                                 <button
-                                  onClick={() => {
-                                    setEditingEvent(event);
-                                    setShowForm(true);
-                                  }}
+                                  onClick={() => handleOpenEdit(event.id)}
                                   className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
                                   aria-label="Edit"
+                                  disabled={loadingEditor}
                                 >
                                   <Pencil size={17} />
                                 </button>

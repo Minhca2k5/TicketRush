@@ -10,4 +10,5 @@ import java.util.UUID;
 @Repository
 public interface EventPriceTierRepository extends JpaRepository<EventPriceTier, UUID> {
     List<EventPriceTier> findByEventId(Long eventId);
+    boolean existsByZoneId(Long zoneId);
 }

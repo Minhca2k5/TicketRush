@@ -9,4 +9,5 @@ import java.util.Optional;
 public interface PriceTierRepository extends JpaRepository<PriceTier, Long> {
     Optional<PriceTier> findByName(String name);
     PriceTier findByNameIgnoreCase(String name);
+    boolean existsById(Long id);
 }

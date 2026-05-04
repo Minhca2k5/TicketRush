@@ -14,4 +14,6 @@ public interface SeatRepository extends JpaRepository<Seat, Long> {
     List<Seat> findByVenueZoneId(Long venueZoneId);
     Optional<Seat> findByIdAndEventId(Long id, Long eventId);
     List<Seat> findByEventIdAndStatusAndLockExpiresAtBefore(Long eventId, String status, LocalDateTime lockExpiresAt);
+    boolean existsByVenueZoneId(Long venueZoneId);
+    boolean existsByPriceTierId(Long priceTierId);
 }

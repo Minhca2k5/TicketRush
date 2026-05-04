@@ -5,7 +5,7 @@ function SeatItemComponent({ seat, isSelected, onToggle }) {
   const disabled = seat.pending || (seat.status !== "AVAILABLE" && !isSelected);
 
   const seatClass = cn(
-    "inline-flex h-10 w-10 items-center justify-center rounded-[12px] border text-[11px] font-bold transition-all duration-150 md:h-11 md:w-11",
+    "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border text-[11px] font-bold transition-all duration-150 md:h-11 md:w-11",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2",
     seat.pending && "cursor-wait opacity-60",
     seat.status === "SOLD" && "cursor-not-allowed border-slate-300 bg-slate-200 text-slate-400",

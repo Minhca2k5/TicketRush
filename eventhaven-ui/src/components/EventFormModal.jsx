@@ -1,535 +1,706 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
 
 const EMPTY_FORM = {
-  name: '', description: '', startTime: '', endTime: '', imageUrl: '',
-  organizer: '', category: '',
-  venueMode: 'existing', // 'existing' | 'custom'
+  name: '',
+  description: '',
+  organizer: '',
+  category: '',
+  startTime: '',
+  endTime: '',
+  imageUrl: '',
   venueId: '',
-  customVenueName: '',
-  customVenueAddress: '',
-  // tiers: [{ zoneId, tierName, price, rows, seatsPerRow, rowPrefix }]
+  venueName: '',
+  venueAddress: '',
+  zones: [],
   tiers: [],
 };
 
-const inputCls = (err) =>
-  `w-full px-3 py-2.5 rounded-xl border text-sm outline-none transition ${err
-    ? 'border-red-400 focus:ring-2 focus:ring-red-200'
-    : 'border-gray-200 focus:border-violet-400 focus:ring-2 focus:ring-violet-100'}`;
+const categories = ['Concert', 'Sport', 'Theater', 'Conference', 'General'];
 
-const numCls = (err) =>
-  `w-full px-2 py-2 rounded-lg border text-sm outline-none text-center transition ${err
-    ? 'border-red-400'
-    : 'border-gray-200 focus:border-violet-400 focus:ring-2 focus:ring-violet-100'}`;
+const inputCls = (error) =>
+  `w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition ${
+    error
+      ? 'border-red-400 focus:ring-2 focus:ring-red-200'
+      : 'border-slate-200 focus:border-violet-400 focus:ring-2 focus:ring-violet-100'
+  }`;
 
-const Field = ({ label, error, hint, children }) => (
-  <div>
-    <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
-    {children}
-    {hint && !error && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
-    {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
-  </div>
-);
+const smallInputCls = (error) =>
+  `w-full rounded-lg border px-3 py-2 text-sm outline-none transition ${
+    error
+      ? 'border-red-400 focus:ring-2 focus:ring-red-200'
+      : 'border-slate-200 focus:border-violet-400 focus:ring-2 focus:ring-violet-100'
+  }`;
+
+function Field({ label, error, hint, children }) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-semibold text-slate-600">{label}</label>
+      {children}
+      {hint && !error && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+    </div>
+  );
+}
+
+function toDateTimeLocal(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const offset = date.getTimezoneOffset();
+  const local = new Date(date.getTime() - offset * 60 * 1000);
+  return local.toISOString().slice(0, 16);
+}
+
+function createZoneState(zone = {}) {
+  return {
+    key: zone.key || (zone.id ? `zone-${zone.id}` : `zone-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+    id: zone.id || null,
+    name: zone.name || '',
+    description: zone.description || '',
+    rows: zone.rows ?? '',
+    seatsPerRow: zone.seatsPerRow ?? '',
+    rowPrefix: zone.rowPrefix || 'A',
+    seatCount: zone.seatCount || 0,
+  };
+}
+
+function createTierState(tier = {}, zones = []) {
+  const matchedZone = zones.find((zone) => zone.id && tier.zoneId && String(zone.id) === String(tier.zoneId))
+    || zones.find((zone) => zone.name && tier.zoneName && zone.name.toLowerCase() === tier.zoneName.toLowerCase());
+
+  return {
+    key: tier.key || `tier-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    zoneKey: matchedZone?.key || '',
+    tierName: tier.tierName || '',
+    price: tier.price != null ? String(tier.price) : '',
+  };
+}
+
+function normalizeInitial(initial) {
+  if (!initial) {
+    return {
+      ...EMPTY_FORM,
+      zones: [createZoneState()],
+      tiers: [createTierState()],
+    };
+  }
+
+  const normalizedZones = (initial.zones?.length ? initial.zones : []).map((zone) => createZoneState(zone));
+  const seedZones = normalizedZones.length ? [...normalizedZones] : [];
+  const rawTiers = initial.priceTiers?.length ? initial.priceTiers : [];
+
+  if (!seedZones.length && rawTiers.length) {
+    rawTiers.forEach((tier) => {
+      if (tier.zoneName && !seedZones.some((zone) => zone.name.toLowerCase() === tier.zoneName.toLowerCase())) {
+        seedZones.push(createZoneState({ name: tier.zoneName, description: '', rowPrefix: 'A' }));
+      }
+    });
+  }
+
+  const finalZones = seedZones.length ? seedZones : [createZoneState()];
+  const finalTiers = rawTiers.length ? rawTiers.map((tier) => createTierState(tier, finalZones)) : [createTierState({}, finalZones)];
+
+  return {
+    name: initial.name || '',
+    description: initial.description || '',
+    organizer: initial.organizer || '',
+    category: initial.category || '',
+    startTime: toDateTimeLocal(initial.startTime),
+    endTime: toDateTimeLocal(initial.endTime),
+    imageUrl: initial.bannerUrl || initial.imageUrl || '',
+    venueId: initial.venue?.id || '',
+    venueName: initial.venue?.name || '',
+    venueAddress: initial.venue?.address || initial.location || '',
+    zones: finalZones,
+    tiers: finalTiers,
+  };
+}
+
+function formatSeatProjection(zone) {
+  const rows = Number(zone.rows || 0);
+  const seatsPerRow = Number(zone.seatsPerRow || 0);
+  if (!rows || !seatsPerRow) return null;
+  return rows * seatsPerRow;
+}
 
 export default function EventFormModal({ initial, onClose, onSaved }) {
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState(initial ? {
-    ...EMPTY_FORM,
-    ...initial,
-    category: initial.category || '',
-    venueMode: 'existing',
-    venueId: initial.venue?.id || '',
-    tiers: initial.priceTiers?.map(t => ({
-      zoneId: t.zoneId || '',
-      tierName: t.tierName || '',
-      price: t.price || '',
-      rows: '',
-      seatsPerRow: '',
-      rowPrefix: 'R',
-    })) || []
-  } : EMPTY_FORM);
+  const [form, setForm] = useState(() => normalizeInitial(initial));
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
-  const [venues, setVenues] = useState([]);
-  const [zones, setZones] = useState([]);
-  const [creatingZone, setCreatingZone] = useState(false);
-  const [zoneDraft, setZoneDraft] = useState({ name: '', description: '' });
 
   useEffect(() => {
-    api.get('/venues').then(res => {
-      setVenues(res.data?.data || res.data || []);
-    }).catch(console.error);
-  }, []);
+    setForm(normalizeInitial(initial));
+    setStep(1);
+    setErrors({});
+  }, [initial]);
 
-  useEffect(() => {
-    if (form.venueMode === 'existing' && form.venueId) {
-      api.get(`/venues/${form.venueId}/zones`).then(res => {
-        setZones(res.data?.data || res.data || []);
-      }).catch(console.error);
-    } else {
-      setZones([]);
-    }
-  }, [form.venueId, form.venueMode]);
+  const zoneOptions = useMemo(
+    () => form.zones.filter((zone) => zone.name.trim()),
+    [form.zones]
+  );
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  const setTier = (i, k, v) => setForm(f => {
-    const t = [...f.tiers]; t[i] = { ...t[i], [k]: v }; return { ...f, tiers: t };
-  });
-  const addTier = () => setForm(f => ({
-    ...f, tiers: [...f.tiers, { zoneId: '', tierName: '', price: '', rows: '', seatsPerRow: '', rowPrefix: 'R' }]
-  }));
-  const removeTier = (i) => setForm(f => ({ ...f, tiers: f.tiers.filter((_, j) => j !== i) }));
-  const setZoneField = (k, v) => setZoneDraft(d => ({ ...d, [k]: v }));
+  const setField = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
 
-  const createZoneInline = async () => {
-    if (form.venueMode !== 'existing' || !form.venueId) {
-      setErrors(e => ({ ...e, zoneDraftName: 'Select an existing venue before adding zones' }));
-      return;
-    }
-    if (!zoneDraft.name.trim()) {
-      setErrors(e => ({ ...e, zoneDraftName: 'Zone name is required' }));
-      return;
-    }
+  const updateZone = (zoneKey, field, value) => {
+    setForm((current) => ({
+      ...current,
+      zones: current.zones.map((zone) => (zone.key === zoneKey ? { ...zone, [field]: value } : zone)),
+    }));
+  };
 
-    setCreatingZone(true);
-    try {
-      const payload = {
-        name: zoneDraft.name.trim(),
-        description: zoneDraft.description.trim(),
-      };
-      const created = await api.post(`/venues/${form.venueId}/zones`, payload);
-      const createdZone = created.data?.data || created.data;
+  const addZone = () => {
+    setForm((current) => ({ ...current, zones: [...current.zones, createZoneState()] }));
+  };
 
-      const zonesRes = await api.get(`/venues/${form.venueId}/zones`);
-      const refreshedZones = zonesRes.data?.data || zonesRes.data || [];
-      setZones(refreshedZones);
-      setZoneDraft({ name: '', description: '' });
-      setErrors(e => {
-        const nextErrors = { ...e };
-        delete nextErrors.zoneDraftName;
-        return nextErrors;
-      });
+  const removeZone = (zoneKey) => {
+    setForm((current) => ({
+      ...current,
+      zones: current.zones.filter((zone) => zone.key !== zoneKey),
+      tiers: current.tiers.map((tier) => (tier.zoneKey === zoneKey ? { ...tier, zoneKey: '' } : tier)),
+    }));
+  };
 
-      setForm(f => {
-        const firstEmptyTierIndex = f.tiers.findIndex(t => !t.zoneId);
-        if (firstEmptyTierIndex === -1 || !createdZone?.id) return f;
-        const nextTiers = [...f.tiers];
-        nextTiers[firstEmptyTierIndex] = { ...nextTiers[firstEmptyTierIndex], zoneId: String(createdZone.id) };
-        return { ...f, tiers: nextTiers };
-      });
-    } catch (err) {
-      setErrors(e => ({
-        ...e,
-        zoneDraftName: err.response?.data?.message || 'Unable to create zone',
-      }));
-    } finally {
-      setCreatingZone(false);
-    }
+  const updateTier = (tierKey, field, value) => {
+    setForm((current) => ({
+      ...current,
+      tiers: current.tiers.map((tier) => (tier.key === tierKey ? { ...tier, [field]: value } : tier)),
+    }));
+  };
+
+  const addTier = () => {
+    setForm((current) => ({ ...current, tiers: [...current.tiers, createTierState({}, current.zones)] }));
+  };
+
+  const removeTier = (tierKey) => {
+    setForm((current) => ({
+      ...current,
+      tiers: current.tiers.filter((tier) => tier.key !== tierKey),
+    }));
   };
 
   const validate = () => {
-    const e = {};
-    if (step === 1) {
-      if (!form.name.trim()) e.name = 'Required';
-      if (!form.category.trim()) e.category = 'Required';
-      if (!form.organizer.trim()) e.organizer = 'Required';
-    }
-    if (step === 2) {
-      if (form.venueMode === 'existing' && !form.venueId) e.venueId = 'Please select a venue';
-      if (form.venueMode === 'custom' && !form.customVenueAddress.trim()) e.customVenueAddress = 'Please enter venue address';
-      if (!form.startTime) e.startTime = 'Required';
-    }
-    if (step === 3) {
-      // Validate tiers
-      const zoneIds = new Set();
-      form.tiers.forEach((t, i) => {
-        if (!t.zoneId) e[`tier_${i}_zone`] = 'Please select a zone';
-        else if (zoneIds.has(t.zoneId)) e[`tier_${i}_zone`] = 'This zone is already used in another tier';
-        else zoneIds.add(t.zoneId);
+    const nextErrors = {};
 
-        if (!t.tierName.trim()) e[`tier_${i}_name`] = 'Required';
-        if (!t.price || parseFloat(t.price) <= 0) e[`tier_${i}_price`] = 'Invalid price';
+    if (step === 1) {
+      if (!form.name.trim()) nextErrors.name = 'Event title is required';
+      if (!form.category.trim()) nextErrors.category = 'Category is required';
+      if (!form.organizer.trim()) nextErrors.organizer = 'Organizer is required';
+    }
+
+    if (step === 2) {
+      if (!form.venueAddress.trim()) nextErrors.venueAddress = 'Venue address is required';
+      if (!form.startTime) nextErrors.startTime = 'Start date & time is required';
+    }
+
+    if (step === 3) {
+      const zoneNames = new Set();
+      const tierZoneKeys = new Set();
+
+      if (!form.zones.length) {
+        nextErrors.zones = 'Add at least one zone';
+      }
+
+      form.zones.forEach((zone, index) => {
+        const trimmedName = zone.name.trim();
+        if (!trimmedName) {
+          nextErrors[`zone_${zone.key}_name`] = 'Zone name is required';
+          return;
+        }
+
+        const normalizedName = trimmedName.toLowerCase();
+        if (zoneNames.has(normalizedName)) {
+          nextErrors[`zone_${zone.key}_name`] = 'Zone name must be unique';
+        }
+        zoneNames.add(normalizedName);
+
+        const rows = zone.rows === '' ? null : Number(zone.rows);
+        const seatsPerRow = zone.seatsPerRow === '' ? null : Number(zone.seatsPerRow);
+
+        if ((rows && !seatsPerRow) || (!rows && seatsPerRow)) {
+          nextErrors[`zone_${zone.key}_layout`] = 'Rows and seats per row must be filled together';
+        }
+
+        if (rows != null && (Number.isNaN(rows) || rows < 1 || rows > 30)) {
+          nextErrors[`zone_${zone.key}_rows`] = 'Rows must be between 1 and 30';
+        }
+
+        if (seatsPerRow != null && (Number.isNaN(seatsPerRow) || seatsPerRow < 1 || seatsPerRow > 50)) {
+          nextErrors[`zone_${zone.key}_seats`] = 'Seats per row must be between 1 and 50';
+        }
+
+        if (!zone.rowPrefix.trim()) {
+          nextErrors[`zone_${zone.key}_prefix`] = 'Starting row label is required';
+        }
+
+        if (index === 0 && !form.tiers.length) {
+          nextErrors.tiers = 'Add at least one ticket tier';
+        }
+      });
+
+      form.tiers.forEach((tier) => {
+        if (!tier.zoneKey) {
+          nextErrors[`tier_${tier.key}_zone`] = 'Select a zone';
+        } else if (tierZoneKeys.has(tier.zoneKey)) {
+          nextErrors[`tier_${tier.key}_zone`] = 'Each zone can only be used once';
+        } else {
+          tierZoneKeys.add(tier.zoneKey);
+        }
+
+        if (!tier.tierName.trim()) {
+          nextErrors[`tier_${tier.key}_name`] = 'Tier name is required';
+        }
+
+        const price = Number(tier.price);
+        if (!tier.price || Number.isNaN(price) || price <= 0) {
+          nextErrors[`tier_${tier.key}_price`] = 'Price must be greater than 0';
+        }
       });
     }
-    setErrors(e);
-    return Object.keys(e).length === 0;
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   };
 
-  const next = () => { if (validate()) setStep(s => s + 1); };
-  const back = () => setStep(s => s - 1);
+  const next = () => {
+    if (validate()) {
+      setStep((current) => current + 1);
+    }
+  };
+
+  const back = () => {
+    setStep((current) => current - 1);
+  };
 
   const submit = async () => {
     if (!validate()) return;
+
     setSaving(true);
     try {
-      let venuePayload;
-      let resolvedVenueId;
-
-      if (form.venueMode === 'custom') {
-        const venueName = form.customVenueName.trim() || 'Custom Venue';
-        const venueAddress = form.customVenueAddress.trim();
-        const created = await api.post('/venues', { name: venueName, address: venueAddress, totalCapacity: 0 });
-        const newVenue = created.data?.data || created.data;
-        resolvedVenueId = newVenue.id;
-        venuePayload = { id: newVenue.id };
-      } else {
-        resolvedVenueId = form.venueId;
-        venuePayload = { id: form.venueId };
-      }
+      const totalCapacity = form.zones.reduce((sum, zone) => sum + (formatSeatProjection(zone) || 0), 0);
 
       const payload = {
-        name: form.name,
-        description: form.description,
-        venue: venuePayload,
-        startTime: form.startTime,
-        endTime: form.endTime,
-        bannerUrl: form.imageUrl,
-        status: 'LIVE',
-        priceTiers: form.tiers.filter(t => t.zoneId && t.tierName).map(t => ({
-          zoneId: t.zoneId,
-          tierName: t.tierName,
-          price: t.price,
-        }))
+        name: form.name.trim(),
+        category: form.category.trim(),
+        organizer: form.organizer.trim(),
+        description: form.description.trim() || null,
+        startTime: form.startTime || null,
+        endTime: form.endTime || null,
+        imageUrl: form.imageUrl.trim() || null,
+        bannerUrl: form.imageUrl.trim() || null,
+        venue: {
+          id: form.venueId || null,
+          name: form.venueName.trim() || 'Custom Venue',
+          address: form.venueAddress.trim(),
+          totalCapacity,
+        },
+        zones: form.zones
+          .filter((zone) => zone.name.trim())
+          .map((zone) => ({
+            id: zone.id || null,
+            name: zone.name.trim(),
+            description: zone.description.trim() || null,
+            rows: zone.rows === '' ? null : Number(zone.rows),
+            seatsPerRow: zone.seatsPerRow === '' ? null : Number(zone.seatsPerRow),
+            rowPrefix: zone.rowPrefix.trim() || 'A',
+            seatCount: formatSeatProjection(zone) || zone.seatCount || 0,
+          })),
+        priceTiers: form.tiers.map((tier) => {
+          const linkedZone = form.zones.find((zone) => zone.key === tier.zoneKey);
+          return {
+            zoneId: linkedZone?.id || null,
+            zoneName: linkedZone?.name?.trim() || '',
+            tierName: tier.tierName.trim(),
+            price: Number(tier.price),
+          };
+        }),
       };
 
-      let savedEventId;
-      if (initial?.id) {
-        await api.put(`/events/${initial.id}`, payload);
-        savedEventId = initial.id;
-      } else {
-        const res = await api.post('/events', payload);
-        savedEventId = (res.data?.data || res.data)?.id;
-      }
+      const response = initial?.id
+        ? await api.put(`/events/${initial.id}`, payload)
+        : await api.post('/events', payload);
 
-      // ── Configure seat grids for zones that have rows/seatsPerRow specified ──
-      const seatConfigPromises = form.tiers
-        .filter(t => t.zoneId && t.rows && t.seatsPerRow && parseInt(t.rows) > 0 && parseInt(t.seatsPerRow) > 0)
-        .map(t => {
-          // Find the venueId from the zone
-          const zone = zones.find(z => z.id === t.zoneId);
-          const venueId = zone?.venueId || resolvedVenueId;
-          return api.post(`/venues/${venueId}/zones/${t.zoneId}/seats/configure`, {
-            rows: parseInt(t.rows),
-            seatsPerRow: parseInt(t.seatsPerRow),
-            rowPrefix: t.rowPrefix || 'R',
-          });
-        });
+      const apiMessage = response.data?.message
+        || (initial ? 'Event updated successfully' : 'Event created successfully');
 
-      if (seatConfigPromises.length > 0) {
-        await Promise.all(seatConfigPromises);
-        // Refresh zones to update seat counts in UI
-        const zonesRes = await api.get(`/venues/${resolvedVenueId}/zones`);
-        setZones(zonesRes.data?.data || zonesRes.data || []);
-      }
-
-      onSaved(initial ? 'Event updated! Seats reconfigured ✓' : 'Event created! 🎉');
-      onClose();
-    } catch (err) {
-      onSaved('Error: ' + (err.response?.data?.message || err.message), 'error');
-    } finally { setSaving(false); }
+      onSaved(apiMessage, 'success');
+    } catch (error) {
+      onSaved(error.response?.data?.message || error.message || 'Unable to save event', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-[28px] bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div>
-            <h2 className="text-base font-bold text-gray-900">{initial ? 'Edit Event' : 'Create New Event'}</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Step {step} of 3</p>
+            <h2 className="text-base font-bold text-slate-950">{initial ? 'Edit Event' : 'Create New Event'}</h2>
+            <p className="mt-0.5 text-xs text-slate-400">Step {step} of 3</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg border border-gray-200 text-gray-400 hover:text-red-500 hover:border-red-300 flex items-center justify-center transition text-lg leading-none">×</button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-400 transition hover:border-red-300 hover:text-red-500"
+          >
+            ×
+          </button>
         </div>
 
-        {/* Step progress */}
-        <div className="flex px-6 py-3 gap-2">
-          {['Basic Info', 'Media & Venue', 'Pricing & Seats'].map((s, i) => (
-            <div key={i} className="flex-1 text-center">
-              <div className={`h-1 rounded-full mb-1 ${step > i ? 'bg-violet-600' : 'bg-gray-200'}`} />
-              <span className={`text-xs ${step === i + 1 ? 'text-violet-600 font-semibold' : 'text-gray-400'}`}>{s}</span>
+        <div className="flex gap-2 px-6 py-3">
+          {['Basic Info', 'Venue & Media', 'Pricing & Seats'].map((label, index) => (
+            <div key={label} className="flex-1 text-center">
+              <div className={`mb-1 h-1 rounded-full ${step > index ? 'bg-violet-600' : 'bg-slate-200'}`} />
+              <span className={`text-xs ${step === index + 1 ? 'font-semibold text-violet-600' : 'text-slate-400'}`}>{label}</span>
             </div>
           ))}
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-
-          {/* ── STEP 1 ── */}
+        <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
           {step === 1 && (
             <>
               <Field label="Event Title *" error={errors.name}>
-                <input className={inputCls(errors.name)} placeholder="e.g. Summer Music Festival" value={form.name} onChange={e => set('name', e.target.value)} />
+                <input
+                  className={inputCls(errors.name)}
+                  placeholder="e.g. Summer Music Festival 2026"
+                  value={form.name}
+                  onChange={(event) => setField('name', event.target.value)}
+                />
               </Field>
+
               <Field label="Category *" error={errors.category}>
-                <select className={inputCls(errors.category)} value={form.category} onChange={e => set('category', e.target.value)}>
+                <select
+                  className={inputCls(errors.category)}
+                  value={form.category}
+                  onChange={(event) => setField('category', event.target.value)}
+                >
                   <option value="">Select category</option>
-                  <option value="Concert">Concert</option>
-                  <option value="Sport">Sport</option>
-                  <option value="Theater">Theater</option>
-                  <option value="Conference">Conference</option>
-                  <option value="General">General</option>
+                  {categories.map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
                 </select>
               </Field>
+
               <Field label="Organizer *" error={errors.organizer}>
-                <input className={inputCls(errors.organizer)} placeholder="Organizer name" value={form.organizer} onChange={e => set('organizer', e.target.value)} />
+                <input
+                  className={inputCls(errors.organizer)}
+                  placeholder="Organizer name"
+                  value={form.organizer}
+                  onChange={(event) => setField('organizer', event.target.value)}
+                />
               </Field>
+
               <Field label="Description">
-                <textarea className={inputCls()} rows={4} placeholder="Describe the event..." value={form.description} onChange={e => set('description', e.target.value)} />
+                <textarea
+                  className={inputCls()}
+                  rows={4}
+                  placeholder="Describe the event..."
+                  value={form.description}
+                  onChange={(event) => setField('description', event.target.value)}
+                />
               </Field>
             </>
           )}
 
-          {/* ── STEP 2 ── */}
           {step === 2 && (
             <>
               <div className="rounded-2xl border border-dashed border-violet-200 bg-violet-50/50 p-4">
                 <p className="text-sm font-semibold text-slate-700">Event Banner / Media</p>
-                <p className="mt-1 text-xs text-slate-500">Use an image URL for now. The upload placeholder is ready to be connected to storage later.</p>
+                <p className="mt-1 text-xs text-slate-500">Use an image URL for now. This block can later be connected to file storage.</p>
                 <div className="mt-3 flex min-h-[120px] items-center justify-center rounded-2xl border border-dashed border-violet-200 bg-white text-sm text-slate-400">
                   Event banner upload placeholder
                 </div>
               </div>
 
-              {/* Venue mode toggle */}
-              <div className="flex gap-2 p-1 bg-gray-100 rounded-xl">
-                <button type="button" onClick={() => set('venueMode', 'existing')}
-                  className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${form.venueMode === 'existing' ? 'bg-white shadow text-violet-700' : 'text-gray-500 hover:text-gray-700'}`}>
-                  📍 Choose Existing Venue
-                </button>
-                <button type="button" onClick={() => set('venueMode', 'custom')}
-                  className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${form.venueMode === 'custom' ? 'bg-white shadow text-violet-700' : 'text-gray-500 hover:text-gray-700'}`}>
-                  ✏️ Enter Custom Address
-                </button>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="Venue Name" hint="Optional. We'll keep the current name if you leave it empty on edit.">
+                  <input
+                    className={inputCls()}
+                    placeholder="e.g. Central Park Stage"
+                    value={form.venueName}
+                    onChange={(event) => setField('venueName', event.target.value)}
+                  />
+                </Field>
+
+                <Field label="Venue Address *" error={errors.venueAddress}>
+                  <input
+                    className={inputCls(errors.venueAddress)}
+                    placeholder="e.g. Central Park, New York, NY"
+                    value={form.venueAddress}
+                    onChange={(event) => setField('venueAddress', event.target.value)}
+                  />
+                </Field>
               </div>
 
-              {form.venueMode === 'existing' && (
-                <Field label="Select Venue *" error={errors.venueId} hint="Choose a venue that already has seat zones configured.">
-                  <select className={inputCls(errors.venueId)} value={form.venueId} onChange={e => set('venueId', e.target.value)}>
-                    <option value="">-- Choose Venue --</option>
-                    {venues.map(v => (
-                      <option key={v.id} value={v.id}>{v.name} — {v.address}</option>
-                    ))}
-                  </select>
-                </Field>
-              )}
-
-              {form.venueMode === 'custom' && (
-                <>
-                  <Field label="Venue / Stage Name" hint="Optional. E.g. 'Stage B' or 'Central Park Lawn'">
-                    <input className={inputCls()} placeholder="e.g. Sân khấu ngoài trời" value={form.customVenueName} onChange={e => set('customVenueName', e.target.value)} />
-                  </Field>
-                  <Field label="Full Address *" error={errors.customVenueAddress}>
-                    <input className={inputCls(errors.customVenueAddress)} placeholder="e.g. 18 Lê Văn Lương, Thanh Xuân, Hà Nội" value={form.customVenueAddress} onChange={e => set('customVenueAddress', e.target.value)} />
-                  </Field>
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700 flex gap-2 items-start">
-                    <span className="text-base leading-none mt-0.5">⚠️</span>
-                    <span>A new venue will be created. You can configure seat zones in Step 3.</span>
-                  </div>
-                </>
-              )}
-
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 <Field label="Start Date & Time *" error={errors.startTime}>
-                  <input type="datetime-local" className={inputCls(errors.startTime)} value={form.startTime} onChange={e => set('startTime', e.target.value)} />
+                  <input
+                    type="datetime-local"
+                    className={inputCls(errors.startTime)}
+                    value={form.startTime}
+                    onChange={(event) => setField('startTime', event.target.value)}
+                  />
                 </Field>
+
                 <Field label="End Date & Time">
-                  <input type="datetime-local" className={inputCls()} value={form.endTime} onChange={e => set('endTime', e.target.value)} />
+                  <input
+                    type="datetime-local"
+                    className={inputCls()}
+                    value={form.endTime}
+                    onChange={(event) => setField('endTime', event.target.value)}
+                  />
                 </Field>
               </div>
 
               <Field label="Event Banner Image URL">
-                <input className={inputCls()} placeholder="https://..." value={form.imageUrl} onChange={e => set('imageUrl', e.target.value)} />
+                <input
+                  className={inputCls()}
+                  placeholder="https://..."
+                  value={form.imageUrl}
+                  onChange={(event) => setField('imageUrl', event.target.value)}
+                />
               </Field>
+
               {form.imageUrl && (
-                <div className="rounded-xl overflow-hidden h-32 bg-gradient-to-br from-violet-400 to-indigo-500">
-                  <img src={form.imageUrl} alt="preview" className="h-full w-full object-cover" onError={e => { e.target.style.display = 'none'; }} />
+                <div className="h-36 overflow-hidden rounded-2xl bg-gradient-to-br from-violet-400 to-indigo-500">
+                  <img
+                    src={form.imageUrl}
+                    alt="Event preview"
+                    className="h-full w-full object-cover"
+                    onError={(event) => {
+                      event.currentTarget.style.display = 'none';
+                    }}
+                  />
                 </div>
               )}
             </>
           )}
 
-          {/* ── STEP 3 ── */}
           {step === 3 && (
             <>
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-sm font-semibold text-gray-700">Ticket Tiers & Seat Layout</p>
-                <button onClick={addTier} className="text-xs font-semibold text-violet-600 hover:text-violet-800 transition">+ Add Tier</button>
-              </div>
-
-              <div className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
+              <div className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-gray-800">Seat Zones</p>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Create sections like VIP, General, or Balcony without leaving this modal.
-                    </p>
+                    <p className="text-sm font-semibold text-slate-700">Seat Zones</p>
+                    <p className="mt-1 text-xs text-slate-500">Create seating sections here. Each zone can generate its own seat grid automatically.</p>
                   </div>
-                  <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700">
-                    {zones.length} zone{zones.length === 1 ? '' : 's'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-[1.1fr_1.4fr_auto] md:items-end">
-                  <Field label="Zone Name *" error={errors.zoneDraftName}>
-                    <input
-                      className={inputCls(errors.zoneDraftName)}
-                      placeholder="e.g. VIP"
-                      value={zoneDraft.name}
-                      onChange={e => setZoneField('name', e.target.value)}
-                    />
-                  </Field>
-                  <Field label="Description">
-                    <input
-                      className={inputCls()}
-                      placeholder="Front section, balcony, standing area..."
-                      value={zoneDraft.description}
-                      onChange={e => setZoneField('description', e.target.value)}
-                    />
-                  </Field>
                   <button
                     type="button"
-                    onClick={createZoneInline}
-                    disabled={creatingZone || form.venueMode !== 'existing' || !form.venueId}
-                    className="h-[42px] rounded-xl border border-violet-200 bg-violet-600 px-4 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
+                    onClick={addZone}
+                    className="rounded-xl border border-violet-200 bg-white px-4 py-2 text-sm font-semibold text-violet-700 transition hover:border-violet-300 hover:bg-violet-50"
                   >
-                    {creatingZone ? 'Adding...' : 'Add Zone'}
+                    + Add Zone
                   </button>
                 </div>
 
-                {form.venueMode === 'custom' && (
-                  <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                    Inline zone creation works only with an existing venue. Custom venues are created when you save the event.
-                  </p>
-                )}
+                {errors.zones && <p className="mt-3 text-xs text-red-500">{errors.zones}</p>}
 
-                {form.venueMode === 'existing' && !form.venueId && (
-                  <p className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-                    Select a venue in Step 2 first, then you can add zones here.
-                  </p>
-                )}
-              </div>
+                <div className="mt-4 space-y-4">
+                  {form.zones.map((zone, index) => {
+                    const seatProjection = formatSeatProjection(zone);
+                    return (
+                      <div key={zone.key} className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-slate-700">Zone {index + 1}</p>
+                          {form.zones.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeZone(zone.key)}
+                              className="text-xs font-semibold text-red-500 transition hover:text-red-600"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700 mb-2">
-                💡 Set <strong>Rows</strong> and <strong>Seats/Row</strong> to generate or replace the seat grid for that zone. Leave blank to keep existing seats.
-              </div>
+                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                          <Field label="Zone Name *" error={errors[`zone_${zone.key}_name`]}>
+                            <input
+                              className={smallInputCls(errors[`zone_${zone.key}_name`])}
+                              placeholder="e.g. VIP"
+                              value={zone.name}
+                              onChange={(event) => updateZone(zone.key, 'name', event.target.value)}
+                            />
+                          </Field>
 
-              {form.tiers.length === 0 && (
-                <p className="text-xs text-gray-400 text-center py-4">No tiers yet. Click "+ Add Tier" to begin.</p>
-              )}
+                          <Field label="Description">
+                            <input
+                              className={smallInputCls()}
+                              placeholder="Front section, balcony, standing area..."
+                              value={zone.description}
+                              onChange={(event) => updateZone(zone.key, 'description', event.target.value)}
+                            />
+                          </Field>
+                        </div>
 
-              {form.tiers.map((tier, i) => (
-                <div key={i} className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold text-gray-600">Tier {i + 1}</p>
-                    <button onClick={() => removeTier(i)} className="text-xs text-red-400 hover:text-red-600">Remove</button>
-                  </div>
+                        <div className="mt-3 grid gap-3 md:grid-cols-3">
+                          <Field label="Rows" error={errors[`zone_${zone.key}_rows`] || errors[`zone_${zone.key}_layout`]}>
+                            <input
+                              type="number"
+                              min="1"
+                              max="30"
+                              className={smallInputCls(errors[`zone_${zone.key}_rows`] || errors[`zone_${zone.key}_layout`])}
+                              value={zone.rows}
+                              onChange={(event) => updateZone(zone.key, 'rows', event.target.value)}
+                            />
+                          </Field>
 
-                  {/* Zone + Tier Name + Price row */}
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <label className="text-xs text-gray-500 mb-1 block">Zone *</label>
-                      {zones.length > 0 ? (
-                        <select className={inputCls(errors[`tier_${i}_zone`])} value={tier.zoneId} onChange={e => setTier(i, 'zoneId', e.target.value)}>
-                          <option value="">Select Zone</option>
-                          {zones.map(z => (
-                            <option key={z.id} value={z.id}>
-                              {z.name}{z.seatCount != null ? ` (${z.seatCount})` : ''}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input className={inputCls()} value="No zones" disabled />
-                      )}
-                      {errors[`tier_${i}_zone`] && <p className="text-[10px] text-red-500 mt-1">{errors[`tier_${i}_zone`]}</p>}
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 mb-1 block">Tier Name *</label>
-                      <input className={inputCls(errors[`tier_${i}_name`])} placeholder="VIP" value={tier.tierName} onChange={e => setTier(i, 'tierName', e.target.value)} />
-                      {errors[`tier_${i}_name`] && <p className="text-[10px] text-red-500 mt-1">{errors[`tier_${i}_name`]}</p>}
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 mb-1 block">Price (VND) *</label>
-                      <input type="number" className={inputCls(errors[`tier_${i}_price`])} placeholder="500000" value={tier.price} onChange={e => setTier(i, 'price', e.target.value)} />
-                      {errors[`tier_${i}_price`] && <p className="text-[10px] text-red-500 mt-1">{errors[`tier_${i}_price`]}</p>}
-                    </div>
-                  </div>
+                          <Field label="Seats / Row" error={errors[`zone_${zone.key}_seats`] || errors[`zone_${zone.key}_layout`]}>
+                            <input
+                              type="number"
+                              min="1"
+                              max="50"
+                              className={smallInputCls(errors[`zone_${zone.key}_seats`] || errors[`zone_${zone.key}_layout`])}
+                              value={zone.seatsPerRow}
+                              onChange={(event) => updateZone(zone.key, 'seatsPerRow', event.target.value)}
+                            />
+                          </Field>
 
-                  {/* Seat Grid Configuration */}
-                  <div className="border-t border-gray-200 pt-3">
-                    <p className="text-xs font-semibold text-gray-500 mb-2">🪑 Seat Grid (optional — overwrites existing)</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label className="text-xs text-gray-400 mb-1 block">Rows</label>
-                        <input
-                          type="number"
-                          min="1" max="30"
-                          className={numCls()}
-                          placeholder="e.g. 5"
-                          value={tier.rows}
-                          onChange={e => setTier(i, 'rows', e.target.value)}
-                        />
+                          <Field label="Starting Row Label" error={errors[`zone_${zone.key}_prefix`]}>
+                            <input
+                              className={smallInputCls(errors[`zone_${zone.key}_prefix`])}
+                              maxLength={3}
+                              value={zone.rowPrefix}
+                              onChange={(event) => updateZone(zone.key, 'rowPrefix', event.target.value)}
+                            />
+                          </Field>
+                        </div>
+
+                        {seatProjection ? (
+                          <p className="mt-2 text-xs font-semibold text-violet-600">
+                            This zone will generate {seatProjection} seats automatically.
+                          </p>
+                        ) : (
+                          <p className="mt-2 text-xs text-slate-400">
+                            Leave Rows and Seats / Row blank if you only want to keep the zone for later.
+                          </p>
+                        )}
                       </div>
-                      <div>
-                        <label className="text-xs text-gray-400 mb-1 block">Seats / Row</label>
-                        <input
-                          type="number"
-                          min="1" max="50"
-                          className={numCls()}
-                          placeholder="e.g. 10"
-                          value={tier.seatsPerRow}
-                          onChange={e => setTier(i, 'seatsPerRow', e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-400 mb-1 block">Row Label</label>
-                        <input
-                          className={numCls()}
-                          placeholder="R"
-                          maxLength={3}
-                          value={tier.rowPrefix}
-                          onChange={e => setTier(i, 'rowPrefix', e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    {tier.rows && tier.seatsPerRow && parseInt(tier.rows) > 0 && parseInt(tier.seatsPerRow) > 0 ? (
-                      <p className="text-xs text-violet-600 mt-1.5 font-medium">
-                        → Will create {parseInt(tier.rows) * parseInt(tier.seatsPerRow)} seats ({tier.rows} rows × {tier.seatsPerRow} per row)
-                      </p>
-                    ) : (
-                      (() => {
-                        const zone = zones.find(z => z.id === tier.zoneId);
-                        if (zone && zone.seatCount === 0) {
-                          return (
-                            <p className="text-xs text-amber-600 mt-1.5 font-medium flex items-center gap-1">
-                              ⚠️ This zone has 0 seats. Enter rows/seats above to create them.
-                            </p>
-                          );
-                        }
-                        return null;
-                      })()
-                    )}
-                  </div>
+                    );
+                  })}
                 </div>
-              ))}
+              </div>
 
-              {zones.length === 0 && form.venueMode === 'existing' && (
-                <p className="text-xs text-red-500 mt-2">⚠️ No zones found for the selected venue. Add zones via venue management first.</p>
-              )}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700">Ticket Tiers</p>
+                    <p className="mt-1 text-xs text-slate-500">Attach each tier to a zone so the backend can map pricing and seat generation correctly.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addTier}
+                    className="rounded-xl border border-violet-200 bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700"
+                  >
+                    + Add Tier
+                  </button>
+                </div>
+
+                {errors.tiers && <p className="mt-3 text-xs text-red-500">{errors.tiers}</p>}
+
+                <div className="mt-4 space-y-4">
+                  {form.tiers.map((tier, index) => (
+                    <div key={tier.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-slate-700">Tier {index + 1}</p>
+                        {form.tiers.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeTier(tier.key)}
+                            className="text-xs font-semibold text-red-500 transition hover:text-red-600"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="mt-3 grid gap-3 md:grid-cols-3">
+                        <Field label="Zone *" error={errors[`tier_${tier.key}_zone`]}>
+                          <select
+                            className={smallInputCls(errors[`tier_${tier.key}_zone`])}
+                            value={tier.zoneKey}
+                            onChange={(event) => updateTier(tier.key, 'zoneKey', event.target.value)}
+                          >
+                            <option value="">Select zone</option>
+                            {zoneOptions.map((zone) => (
+                              <option key={zone.key} value={zone.key}>
+                                {zone.name}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+
+                        <Field label="Tier Name *" error={errors[`tier_${tier.key}_name`]}>
+                          <input
+                            className={smallInputCls(errors[`tier_${tier.key}_name`])}
+                            placeholder="e.g. VIP"
+                            value={tier.tierName}
+                            onChange={(event) => updateTier(tier.key, 'tierName', event.target.value)}
+                          />
+                        </Field>
+
+                        <Field label="Price *" error={errors[`tier_${tier.key}_price`]}>
+                          <input
+                            type="number"
+                            min="1"
+                            className={smallInputCls(errors[`tier_${tier.key}_price`])}
+                            placeholder="250"
+                            value={tier.price}
+                            onChange={(event) => updateTier(tier.key, 'price', event.target.value)}
+                          />
+                        </Field>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
-          {step > 1 && <button onClick={back} className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Back</button>}
+        <div className="flex gap-3 border-t border-slate-100 px-6 py-4">
+          {step > 1 && (
+            <button
+              type="button"
+              onClick={back}
+              className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+            >
+              Back
+            </button>
+          )}
+
           <div className="flex-1" />
-          <button onClick={onClose} className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Cancel</button>
-          {step < 3
-            ? <button onClick={next} className="px-6 py-2.5 rounded-xl bg-violet-600 text-sm font-semibold text-white hover:bg-violet-700 transition shadow-sm">Next →</button>
-            : <button onClick={submit} disabled={saving} className="px-6 py-2.5 rounded-xl bg-violet-600 text-sm font-semibold text-white hover:bg-violet-700 transition shadow-sm disabled:opacity-60">
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+
+          {step < 3 ? (
+            <button
+              type="button"
+              onClick={next}
+              className="rounded-xl bg-violet-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700"
+            >
+              Next →
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={submit}
+              disabled={saving}
+              className="rounded-xl bg-violet-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-60"
+            >
               {saving ? 'Saving...' : initial ? 'Update Event' : 'Create Event'}
             </button>
-          }
+          )}
         </div>
       </div>
     </div>

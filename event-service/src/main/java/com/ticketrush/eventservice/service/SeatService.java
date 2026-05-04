@@ -262,6 +262,7 @@ public class SeatService {
         SeatDTO dto = new SeatDTO();
         dto.setId(seat.getId());
         dto.setSeatNumber(seat.getSeatNumber());
+        dto.setRowName(seat.getRowName());
         dto.setStatus(seat.getStatus());
         dto.setLockHolder(seat.getLockHolder());
         dto.setLockExpiresAt(seat.getLockExpiresAt());
