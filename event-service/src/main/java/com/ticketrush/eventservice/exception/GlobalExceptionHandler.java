@@ -14,6 +14,12 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(SeatConflictException.class)
+    public ResponseEntity<ApiResponse<Void>> handleSeatConflictException(SeatConflictException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ApiResponse<Void>> handleRuntimeException(RuntimeException ex) {
         // Many custom exceptions are thrown as RuntimeException in our code
