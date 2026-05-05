@@ -12,6 +12,8 @@ import java.util.Optional;
 public interface QueueEntryRepository extends JpaRepository<QueueEntry, Long> {
     Optional<QueueEntry> findByEventIdAndUserId(Long eventId, String userId);
     
+    long countByEventIdAndStatus(Long eventId, String status);
+    
     @Query("SELECT COUNT(q) FROM QueueEntry q WHERE q.eventId = :eventId AND q.status = 'WAITING' AND q.enteredAt < (SELECT innerQ.enteredAt FROM QueueEntry innerQ WHERE innerQ.id = :entryId)")
     long countUsersAheadInQueue(Long eventId, Long entryId);
 

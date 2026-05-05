@@ -25,10 +25,13 @@ public class QueueService {
         if (existing.isPresent()) {
             entry = existing.get();
         } else {
+            long waitingCount = queueRepository.countByEventIdAndStatus(eventId, "WAITING");
+            
             entry = new QueueEntry();
             entry.setEventId(eventId);
             entry.setUserId(userId);
-            entry.setStatus("WAITING");
+            // If no one is waiting, let them in immediately
+            entry.setStatus(waitingCount == 0 ? "ALLOWED_TO_ENTER" : "WAITING");
             entry = queueRepository.save(entry);
         }
 
