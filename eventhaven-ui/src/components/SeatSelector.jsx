@@ -11,7 +11,9 @@ import { BookingCart } from "./BookingCart";
 import { getSeatLayout, getSeatMap, lockSeat, releaseSeat } from "../services/eventService";
 
 const HOLD_MINUTES = 10;
+const POLL_INTERVAL_MS = 5000;
 const HOLDER_STORAGE_KEY = "ticketrush-seat-holder";
+const CONFLICT_TOAST_MESSAGE = "Ghế này vừa có người đặt, vui lòng chọn ghế khác";
 
 function getOrCreateHolderId() {
   const existing = window.localStorage.getItem(HOLDER_STORAGE_KEY);
@@ -38,8 +40,19 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
   const [lastSyncAt, setLastSyncAt] = useState(Date.now());
   const [syncMessage, setSyncMessage] = useState("");
   const [seatActionInFlight, setSeatActionInFlight] = useState([]);
+  const [toast, setToast] = useState(null);
   const holderIdRef = useRef(null);
   const selectedSeatsRef = useRef([]);
+
+  const mergeSeatDetails = useCallback((baseSeat, overrides = {}) => ({
+    ...baseSeat,
+    ...overrides,
+    price: Number(overrides.price ?? baseSeat.price ?? 0),
+    zone: overrides.zone ?? baseSeat.zone,
+    row: overrides.row ?? baseSeat.row,
+    number: overrides.number ?? baseSeat.number,
+    seatLabel: overrides.seatLabel ?? baseSeat.seatLabel ?? `${baseSeat.row}${baseSeat.number}`,
+  }), []);
 
   useEffect(() => {
     selectedSeatsRef.current = selectedSeats;
@@ -59,47 +72,60 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
   }, [initialLayout]);
 
   useEffect(() => {
+    if (!toast) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => setToast(null), 3200);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  const syncSeatStatus = useCallback(async ({ silentError = false } = {}) => {
+    setIsSyncing(true);
+    try {
+      const [seatMapPayload, layoutPayload] = await Promise.all([
+        getSeatMap(eventId).catch(() => []),
+        getSeatLayout(eventId).catch(() => null),
+      ]);
+      const mapped = mapSeatLayoutToType(layoutPayload);
+      const mappedSeats = mapSeatsToType(Array.isArray(seatMapPayload) ? seatMapPayload : []);
+
+      setSeatLayout(mapped.layout);
+      setLiveSeats(mappedSeats.length ? mappedSeats : mapped.seats);
+      setLastSyncAt(Date.now());
+      setSyncMessage("");
+    } catch {
+      if (!silentError) {
+        setSyncMessage("Live seat status is temporarily unavailable.");
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [eventId]);
+
+  useEffect(() => {
     if (!eventId) {
       return undefined;
     }
 
     let active = true;
 
-    const syncSeatStatus = async () => {
-      setIsSyncing(true);
-      try {
-        const [seatMapPayload, layoutPayload] = await Promise.all([
-          getSeatMap(eventId).catch(() => []),
-          getSeatLayout(eventId).catch(() => null),
-        ]);
-        const mapped = mapSeatLayoutToType(layoutPayload);
-        const mappedSeats = mapSeatsToType(Array.isArray(seatMapPayload) ? seatMapPayload : []);
-        if (!active) {
-          return;
-        }
-
-        setSeatLayout(mapped.layout);
-        setLiveSeats(mappedSeats.length ? mappedSeats : mapped.seats);
-        setLastSyncAt(Date.now());
-        setSyncMessage("");
-      } catch {
-        if (active) {
-          setSyncMessage("Live seat status is temporarily unavailable.");
-        }
-      } finally {
-        if (active) {
-          setIsSyncing(false);
-        }
+    const guardedSync = async (options = {}) => {
+      if (!active) {
+        return;
       }
+      await syncSeatStatus(options);
     };
 
-    syncSeatStatus();
-    const interval = window.setInterval(syncSeatStatus, 15000);
+    guardedSync();
+    const interval = window.setInterval(() => {
+      guardedSync({ silentError: true }).catch(() => {});
+    }, POLL_INTERVAL_MS);
     return () => {
       active = false;
       window.clearInterval(interval);
     };
-  }, [eventId]);
+  }, [eventId, syncSeatStatus]);
 
   useEffect(() => {
     setSelectedSeats((previous) => {
@@ -111,6 +137,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
       const nextSelection = previous.filter((seat) => retainableSeatIds.has(seat.id));
       if (nextSelection.length !== previous.length) {
         setSyncMessage("One or more selected seats are no longer available and were removed.");
+        setToast({ type: "warning", message: CONFLICT_TOAST_MESSAGE });
       }
       if (!nextSelection.length) {
         setTimerStart(null);
@@ -183,6 +210,20 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
       }
 
       const lockedSeat = await lockSeat(eventId, seat.id, holderIdRef.current, HOLD_MINUTES);
+      const mappedLockedSeat = mapSeatsToType([lockedSeat])[0];
+      const nextSeat = mergeSeatDetails(
+        seat,
+        mappedLockedSeat
+          ? {
+            ...mappedLockedSeat,
+            status: "LOCKED",
+          }
+          : {
+            status: "LOCKED",
+            lockHolder: lockedSeat.lockHolder,
+            lockExpiresAt: lockedSeat.lockExpiresAt,
+          }
+      );
 
       setSelectedSeats((previous) => {
         if (previous.some((item) => item.id === seat.id)) {
@@ -193,51 +234,38 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
         }
         return [
           ...previous,
-          {
-            ...seat,
-            status: "LOCKED",
-            lockHolder: lockedSeat.lockHolder,
-            lockExpiresAt: lockedSeat.lockExpiresAt,
-          },
+          nextSeat,
         ];
       });
       setLiveSeats((previous) =>
         previous.map((item) =>
           item.id === seat.id
-            ? {
-              ...item,
-              status: "LOCKED",
-              lockHolder: lockedSeat.lockHolder,
-              lockExpiresAt: lockedSeat.lockExpiresAt,
-            }
+            ? mergeSeatDetails(item, nextSeat)
             : item
         )
       );
       setSyncMessage("");
     } catch {
-      setSyncMessage("Unable to reserve that seat. Please pick another available seat.");
+      setSyncMessage(CONFLICT_TOAST_MESSAGE);
+      setToast({ type: "warning", message: CONFLICT_TOAST_MESSAGE });
       try {
-        const [seatMapPayload, layoutPayload] = await Promise.all([
-          getSeatMap(eventId).catch(() => []),
-          getSeatLayout(eventId).catch(() => null),
-        ]);
-        const mapped = mapSeatLayoutToType(layoutPayload);
-        const mappedSeats = mapSeatsToType(Array.isArray(seatMapPayload) ? seatMapPayload : []);
-        setSeatLayout(mapped.layout);
-        setLiveSeats(mappedSeats.length ? mappedSeats : mapped.seats);
+        await syncSeatStatus({ silentError: true });
       } catch {
         // Keep the current UI state if the refresh also fails.
       }
     } finally {
       mutateSeatInFlight(seat.id, false);
     }
-  }, [eventId, mutateSeatInFlight]);
+  }, [eventId, mergeSeatDetails, mutateSeatInFlight, syncSeatStatus]);
 
   const handleRemoveSeat = useCallback(async (seat) => {
     await handleSeatSelect(seat);
   }, [handleSeatSelect]);
 
-  const total = useMemo(() => selectedSeats.reduce((sum, seat) => sum + seat.price, 0), [selectedSeats]);
+  const total = useMemo(
+    () => selectedSeats.reduce((sum, seat) => sum + Number(seat.price || 0), 0),
+    [selectedSeats]
+  );
   const seats = useMemo(() => (
     liveSeats.map((seat) => ({
       ...seat,
@@ -273,7 +301,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
             ) : null}
             <span className="inline-flex items-center gap-2 text-slate-500">
               <RefreshCcw size={16} className={isSyncing ? "animate-spin" : ""} />
-              Auto-refresh every 15s
+              Auto-refresh every 5s
             </span>
           </div>
         </div>
@@ -366,6 +394,20 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
             >
               Continue
             </button>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className="fixed right-4 top-24 z-[70] max-w-sm rounded-2xl border border-amber-200 bg-white px-4 py-3 shadow-xl">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+              <AlertTriangle size={16} />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Seat conflict</p>
+              <p className="mt-1 text-sm text-slate-600">{toast.message}</p>
+            </div>
           </div>
         </div>
       )}

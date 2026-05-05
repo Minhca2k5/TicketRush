@@ -14,9 +14,9 @@ spring:
           predicates:
             - Path=/auth/**
         - id: event-service
-          uri: http://event-service:8080
+          uri: http://event-service:8082
           predicates:
             - Path=/api/**
 
 jwt:
-  secret: mySuperSecretKeyThatIsAtLeast32CharactersLongForJWT
+  secret: ticketrushJwtSecretKeyMustBeAtLeastThirtyTwoBytesLong2026

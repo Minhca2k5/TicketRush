@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Clock3, Ticket, Trash2 } from 'lucide-react';
 
+const currencyFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  maximumFractionDigits: 0,
+});
+
 export function BookingCart({ selectedSeats, onRemoveSeat, onBookNow, timerStart, total }) {
   const [remaining, setRemaining] = useState(600);
 
@@ -25,6 +31,8 @@ export function BookingCart({ selectedSeats, onRemoveSeat, onBookNow, timerStart
     const seconds = String(remaining % 60).padStart(2, '0');
     return `${minutes}:${seconds}`;
   }, [remaining]);
+
+  const subtotalLabel = useMemo(() => currencyFormatter.format(total || 0), [total]);
 
   return (
     <div className="rounded-[28px] border border-white/70 bg-white/90 p-5 shadow-[0_24px_50px_rgba(148,163,184,0.14)]">
@@ -52,11 +60,11 @@ export function BookingCart({ selectedSeats, onRemoveSeat, onBookNow, timerStart
             {selectedSeats.map((seat) => (
               <div key={seat.id} className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm">
                 <div>
-                  <p className="text-sm font-bold text-slate-900">{seat.row}{seat.number}</p>
+                  <p className="text-sm font-bold text-slate-900">{seat.seatLabel || `${seat.row}${seat.number}`}</p>
                   <p className="text-xs text-slate-500">{seat.zone}</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <p className="text-sm font-bold text-slate-900">${seat.price.toLocaleString()}</p>
+                  <p className="text-sm font-bold text-slate-900">{currencyFormatter.format(seat.price || 0)}</p>
                   <button
                     type="button"
                     onClick={() => onRemoveSeat(seat)}
@@ -78,7 +86,7 @@ export function BookingCart({ selectedSeats, onRemoveSeat, onBookNow, timerStart
         </div>
         <div className="mt-3 flex items-end justify-between">
           <span className="text-sm text-slate-400">Subtotal</span>
-          <span className="text-3xl font-black">${total.toLocaleString()}</span>
+          <span className="text-3xl font-black">{subtotalLabel}</span>
         </div>
       </div>
 

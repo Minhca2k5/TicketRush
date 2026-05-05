@@ -5,7 +5,7 @@ import { LogIn, Lock, Mail, Ticket } from 'lucide-react';
 import { getRoleFromToken } from '../lib/auth';
 import './Auth.css';
 
-const API_BASE_URL = '';
+const API_BASE_URL = import.meta.env.VITE_AUTH_API_BASE_URL || 'http://localhost:8080';
 
 const Login = () => {
   const [username, setUsername] = useState('');

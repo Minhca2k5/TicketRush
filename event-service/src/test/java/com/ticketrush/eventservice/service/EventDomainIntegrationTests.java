@@ -274,7 +274,7 @@ class EventDomainIntegrationTests {
         assertThat(lockedSeat.getLockExpiresAt()).isAfter(LocalDateTime.now());
 
         assertThatThrownBy(() -> seatService.lockSeat(event.getId(), seat.getId(), "session-b", 10))
-                .hasMessageContaining("already locked");
+                .hasMessageContaining("Ghế này vừa có người đặt");
 
         seatService.releaseSeat(event.getId(), seat.getId(), "session-a");
 

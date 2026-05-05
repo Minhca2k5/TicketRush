@@ -4,7 +4,7 @@ import axios from 'axios';
 import { ArrowRight, Lock, Mail, Ticket, UserPlus } from 'lucide-react';
 import './Auth.css';
 
-const API_BASE_URL = '';
+const API_BASE_URL = import.meta.env.VITE_AUTH_API_BASE_URL || 'http://localhost:8080';
 
 const Register = () => {
   const [username, setUsername] = useState('');

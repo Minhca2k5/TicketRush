@@ -3,18 +3,24 @@ package com.ticketrush.eventservice.service;
 import com.ticketrush.eventservice.dto.SeatBatchDTO;
 import com.ticketrush.eventservice.dto.SeatCreationRequest;
 import com.ticketrush.eventservice.dto.SeatDTO;
+import com.ticketrush.eventservice.dto.PriceTierDTO;
+import com.ticketrush.eventservice.dto.VenueZoneDTO;
 import com.ticketrush.eventservice.entity.Event;
 import com.ticketrush.eventservice.entity.EventPriceTier;
 import com.ticketrush.eventservice.entity.PriceTier;
 import com.ticketrush.eventservice.entity.Seat;
 import com.ticketrush.eventservice.entity.Venue;
 import com.ticketrush.eventservice.entity.VenueZone;
+import com.ticketrush.eventservice.exception.SeatConflictException;
 import com.ticketrush.eventservice.repository.EventPriceTierRepository;
 import com.ticketrush.eventservice.repository.EventRepository;
 import com.ticketrush.eventservice.repository.PriceTierRepository;
 import com.ticketrush.eventservice.repository.SeatRepository;
 import com.ticketrush.eventservice.repository.VenueZoneRepository;
+import jakarta.persistence.LockTimeoutException;
+import jakarta.persistence.PessimisticLockException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +36,7 @@ import java.util.stream.Collectors;
 public class SeatService {
     private static final int DEFAULT_HOLD_MINUTES = 10;
     private static final int MAX_HOLD_MINUTES = 30;
+    private static final String SEAT_CONFLICT_MESSAGE = "Ghế này vừa có người đặt, vui lòng chọn ghế khác";
 
     private final EventRepository eventRepository;
     private final VenueZoneRepository venueZoneRepository;
@@ -129,16 +136,16 @@ public class SeatService {
 
     @Transactional
     public SeatDTO lockSeat(Long eventId, Long seatId, String holderId, Integer holdMinutes) {
-        Seat seat = getSeatForEvent(eventId, seatId);
+        Seat seat = getSeatForEventForUpdate(eventId, seatId);
         expireLockIfNeeded(seat);
 
         if (isSold(seat)) {
-            throw new RuntimeException("Seat is no longer available");
+            throw new SeatConflictException(SEAT_CONFLICT_MESSAGE);
         }
 
         String normalizedHolderId = required(holderId, "Holder id is required");
         if (isLockedByAnotherHolder(seat, normalizedHolderId)) {
-            throw new RuntimeException("Seat is already locked by another customer");
+            throw new SeatConflictException(SEAT_CONFLICT_MESSAGE);
         }
 
         seat.setStatus("LOCKED");
@@ -149,7 +156,7 @@ public class SeatService {
 
     @Transactional
     public SeatDTO releaseSeat(Long eventId, Long seatId, String holderId) {
-        Seat seat = getSeatForEvent(eventId, seatId);
+        Seat seat = getSeatForEventForUpdate(eventId, seatId);
         expireLockIfNeeded(seat);
 
         if (!"LOCKED".equalsIgnoreCase(seat.getStatus())) {
@@ -158,7 +165,7 @@ public class SeatService {
 
         String normalizedHolderId = required(holderId, "Holder id is required");
         if (seat.getLockHolder() != null && !seat.getLockHolder().equals(normalizedHolderId)) {
-            throw new RuntimeException("Seat is locked by another customer");
+            throw new SeatConflictException(SEAT_CONFLICT_MESSAGE);
         }
 
         releaseLock(seat);
@@ -173,20 +180,21 @@ public class SeatService {
         }
 
         List<Seat> seats = new ArrayList<>();
-        for (Long seatId : seatIds) {
-            Seat seat = getSeatForEvent(eventId, seatId);
+        List<Long> sortedSeatIds = seatIds.stream().sorted().collect(Collectors.toList());
+        for (Long seatId : sortedSeatIds) {
+            Seat seat = getSeatForEventForUpdate(eventId, seatId);
             expireLockIfNeeded(seat);
 
             if (!"LOCKED".equalsIgnoreCase(seat.getStatus())) {
-                throw new RuntimeException("Seat must be locked before purchase");
+                throw new SeatConflictException(SEAT_CONFLICT_MESSAGE);
             }
 
             if (!Objects.equals(seat.getLockHolder(), normalizedHolderId)) {
-                throw new RuntimeException("Seat is locked by another customer");
+                throw new SeatConflictException(SEAT_CONFLICT_MESSAGE);
             }
 
             if (seat.getLockExpiresAt() == null || !seat.getLockExpiresAt().isAfter(LocalDateTime.now())) {
-                throw new RuntimeException("Seat lock has expired");
+                throw new SeatConflictException(SEAT_CONFLICT_MESSAGE);
             }
 
             seat.setStatus("SOLD");
@@ -219,6 +227,15 @@ public class SeatService {
     private Seat getSeatForEvent(Long eventId, Long seatId) {
         return seatRepository.findByIdAndEventId(seatId, eventId)
                 .orElseThrow(() -> new RuntimeException("Seat not found"));
+    }
+
+    private Seat getSeatForEventForUpdate(Long eventId, Long seatId) {
+        try {
+            return seatRepository.findByIdAndEventIdForUpdate(seatId, eventId)
+                    .orElseThrow(() -> new RuntimeException("Seat not found"));
+        } catch (PessimisticLockingFailureException | LockTimeoutException | PessimisticLockException ex) {
+            throw new SeatConflictException(SEAT_CONFLICT_MESSAGE, ex);
+        }
     }
 
     private boolean isSold(Seat seat) {
@@ -266,6 +283,25 @@ public class SeatService {
         dto.setStatus(seat.getStatus());
         dto.setLockHolder(seat.getLockHolder());
         dto.setLockExpiresAt(seat.getLockExpiresAt());
+
+        if (seat.getVenueZone() != null) {
+            VenueZoneDTO zoneDTO = new VenueZoneDTO();
+            zoneDTO.setId(seat.getVenueZone().getId());
+            zoneDTO.setVenueId(seat.getVenueZone().getVenue() != null ? seat.getVenueZone().getVenue().getId() : null);
+            zoneDTO.setName(seat.getVenueZone().getName());
+            zoneDTO.setDescription(seat.getVenueZone().getDescription());
+            zoneDTO.setSeatCount(seat.getVenueZone().getSeats() != null ? seat.getVenueZone().getSeats().size() : null);
+            dto.setVenueZone(zoneDTO);
+        }
+
+        if (seat.getPriceTier() != null) {
+            PriceTierDTO priceTierDTO = new PriceTierDTO();
+            priceTierDTO.setId(seat.getPriceTier().getId());
+            priceTierDTO.setName(seat.getPriceTier().getName());
+            priceTierDTO.setPrice(seat.getPriceTier().getPrice());
+            dto.setPriceTier(priceTierDTO);
+        }
+
         return dto;
     }
 

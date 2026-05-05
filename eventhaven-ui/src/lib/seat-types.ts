@@ -85,7 +85,7 @@ export function mapSeatsToType(backendSeats: any[]): Seat[] {
     const row = parseRowLabel(seatNumber, s.rowName);
     const number = parseSeatIndex(seatNumber);
     const zone = s.venueZone?.name || "Standard";
-    const price = s.priceTier?.price || 0;
+    const price = Number(s.priceTier?.price ?? s.price ?? 0);
     const status = normalizeSeatStatus(s.status);
     return {
       id: s.id,
