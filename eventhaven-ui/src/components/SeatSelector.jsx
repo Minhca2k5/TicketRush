@@ -8,7 +8,8 @@ import { Stage } from "./Stage";
 import { SeatMap } from "./SeatMap";
 import { Legend } from "./Legend";
 import { BookingCart } from "./BookingCart";
-import { getSeatLayout, getSeatMap, lockSeat, releaseSeat } from "../services/eventService";
+import { getSeatLayout, getSeatMap } from "../services/eventService";
+import { lockSeat, releaseSeat, checkout } from "../services/bookingService";
 
 const HOLD_MINUTES = 10;
 const POLL_INTERVAL_MS = 5000;
@@ -41,6 +42,9 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
   const [syncMessage, setSyncMessage] = useState("");
   const [seatActionInFlight, setSeatActionInFlight] = useState([]);
   const [toast, setToast] = useState(null);
+  const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
+  const [checkoutSuccess, setCheckoutSuccess] = useState(false);
+  const [orderId, setOrderId] = useState(null);
   const holderIdRef = useRef(null);
   const selectedSeatsRef = useRef([]);
 
@@ -262,6 +266,26 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
     await handleSeatSelect(seat);
   }, [handleSeatSelect]);
 
+  const handleCheckout = useCallback(async () => {
+    if (!eventId || !holderIdRef.current || !selectedSeats.length) return;
+    setIsCheckoutLoading(true);
+    try {
+      const seatIds = selectedSeats.map(s => s.id);
+      const order = await checkout(eventId, seatIds, holderIdRef.current);
+      setOrderId(order.id);
+      setCheckoutSuccess(true);
+      setSelectedSeats([]);
+      setTimerStart(null);
+      // Trigger a sync so the map turns the seats to SOLD
+      await syncSeatStatus({ silentError: true });
+    } catch (err) {
+      setSyncMessage("Checkout failed. Your session may have expired.");
+      setToast({ type: "warning", message: "Checkout failed. Your session may have expired." });
+    } finally {
+      setIsCheckoutLoading(false);
+    }
+  }, [eventId, selectedSeats, syncSeatStatus]);
+
   const total = useMemo(
     () => selectedSeats.reduce((sum, seat) => sum + Number(seat.price || 0), 0),
     [selectedSeats]
@@ -378,22 +402,56 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
 
       {showBookingConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => setShowBookingConfirm(false)} />
+          <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => !isCheckoutLoading && setShowBookingConfirm(false)} />
           <div className="relative w-full max-w-md rounded-[32px] bg-white p-8 text-center shadow-2xl">
-            <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-violet-100 text-violet-600">
-              <Check size={30} />
-            </div>
-            <h3 className="mt-5 text-2xl font-black text-slate-950">Seats Reserved</h3>
-            <p className="mt-3 text-sm leading-7 text-slate-500">
-              Your seats are currently held for checkout. In a production flow, this is where payment and order confirmation would begin.
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowBookingConfirm(false)}
-              className="mt-6 rounded-full bg-violet-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-violet-500"
-            >
-              Continue
-            </button>
+            {checkoutSuccess ? (
+              <>
+                <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600">
+                  <Check size={30} />
+                </div>
+                <h3 className="mt-5 text-2xl font-black text-slate-950">Payment Successful!</h3>
+                <p className="mt-3 text-sm leading-7 text-slate-500">
+                  Your order #{orderId} has been confirmed. Your tickets are now available.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowBookingConfirm(false)}
+                  className="mt-6 rounded-full bg-green-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-green-500"
+                >
+                  View My Tickets
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-violet-100 text-violet-600">
+                  <ShoppingBag size={30} />
+                </div>
+                <h3 className="mt-5 text-2xl font-black text-slate-950">Confirm Purchase</h3>
+                <p className="mt-3 text-sm leading-7 text-slate-500">
+                  You are about to purchase {selectedSeats.length} ticket(s) for a total of ${total.toLocaleString()}.
+                </p>
+                <button
+                  type="button"
+                  disabled={isCheckoutLoading}
+                  onClick={handleCheckout}
+                  className="mt-6 w-full flex justify-center items-center rounded-full bg-violet-600 px-6 py-4 text-sm font-bold text-white transition hover:bg-violet-500 disabled:opacity-50"
+                >
+                  {isCheckoutLoading ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    "Pay Now"
+                  )}
+                </button>
+                <button
+                  type="button"
+                  disabled={isCheckoutLoading}
+                  onClick={() => setShowBookingConfirm(false)}
+                  className="mt-3 w-full rounded-full bg-slate-100 px-6 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-200 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
