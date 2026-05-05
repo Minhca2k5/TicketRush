@@ -43,7 +43,7 @@ public class BookingService {
                 new ParameterizedTypeReference<ApiResponse<SeatDTO>>() {}
         );
         
-        if (response.getBody() == null || !"SUCCESS".equals(response.getBody().getStatus())) {
+        if (response.getBody() == null || !"SUCCESS".equalsIgnoreCase(response.getBody().getStatus())) {
             throw new RuntimeException("Failed to lock seat in event-service");
         }
         return response.getBody().getData();
@@ -60,7 +60,7 @@ public class BookingService {
                 new ParameterizedTypeReference<ApiResponse<SeatDTO>>() {}
         );
 
-        if (response.getBody() == null || !"SUCCESS".equals(response.getBody().getStatus())) {
+        if (response.getBody() == null || !"SUCCESS".equalsIgnoreCase(response.getBody().getStatus())) {
             throw new RuntimeException("Failed to release seat in event-service");
         }
         return response.getBody().getData();
@@ -78,7 +78,7 @@ public class BookingService {
                 new ParameterizedTypeReference<ApiResponse<List<SeatDTO>>>() {}
         );
 
-        if (response.getBody() == null || !"SUCCESS".equals(response.getBody().getStatus())) {
+        if (response.getBody() == null || !"SUCCESS".equalsIgnoreCase(response.getBody().getStatus())) {
             throw new RuntimeException("Failed to purchase seats in event-service");
         }
 
