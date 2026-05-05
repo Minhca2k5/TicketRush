@@ -217,7 +217,7 @@ public class SeatService {
     }
 
     private Seat getSeatForEvent(Long eventId, Long seatId) {
-        return seatRepository.findByIdAndEventId(seatId, eventId)
+        return seatRepository.findAndLockByIdAndEventId(seatId, eventId)
                 .orElseThrow(() -> new RuntimeException("Seat not found"));
     }
 
