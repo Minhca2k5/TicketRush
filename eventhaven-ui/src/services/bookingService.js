@@ -27,3 +27,8 @@ export async function checkout(eventId, seatIds, holderId) {
   });
   return response.data?.data || response.data;
 }
+
+export async function getUserOrders(userId) {
+  const response = await api.get(`/booking/orders/${userId}`);
+  return response.data?.data || response.data;
+}

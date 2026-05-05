@@ -9,6 +9,7 @@ import AdminDashboard from './components/AdminDashboard';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import Profile from './components/Profile';
 import TicketSalesPage from './pages/admin/TicketSalesPage';
+import OrderHistory from './pages/OrderHistory';
 
 export function AppRoutes() {
   return (
@@ -17,6 +18,7 @@ export function AppRoutes() {
       <Route path="/register" element={<Register />} />
       <Route path="/" element={<Home />} />
       <Route path="/events/:id" element={<EventDetail />} />
+      <Route path="/orders" element={<OrderHistory />} />
       <Route
         path="/profile"
         element={

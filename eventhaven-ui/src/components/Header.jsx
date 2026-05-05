@@ -178,10 +178,10 @@ export function Header() {
               </Link>
             </>
           )}
-          <button className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-violet-200">
+          <Link to="/orders" className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-violet-200">
             <UserCircle2 size={18} className="text-violet-500" />
             My Tickets
-          </button>
+          </Link>
         </div>
 
         <button
