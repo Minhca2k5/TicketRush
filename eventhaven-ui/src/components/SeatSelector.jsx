@@ -34,8 +34,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
   const [showBookingConfirm, setShowBookingConfirm] = useState(false);
   const [seatLayout, setSeatLayout] = useState(initialLayout || null);
   const [liveSeats, setLiveSeats] = useState(() => {
-    const mapped = mapSeatsToType(initialSeats || []);
-    return mapped;
+    return initialSeats || [];
   });
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState(Date.now());
@@ -67,8 +66,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
   }, []);
 
   useEffect(() => {
-    const mapped = mapSeatsToType(initialSeats || []);
-    setLiveSeats(mapped);
+    setLiveSeats(initialSeats || []);
   }, [initialSeats]);
 
   useEffect(() => {
