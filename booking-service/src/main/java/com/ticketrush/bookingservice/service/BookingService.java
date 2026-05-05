@@ -120,4 +120,28 @@ public class BookingService {
         
         return orderDTO;
     }
+
+    public List<OrderDTO> getUserOrders(String userId) {
+        List<Order> orders = orderRepository.findByUserId(userId);
+        return orders.stream().map(order -> {
+            OrderDTO dto = new OrderDTO();
+            dto.setId(order.getId());
+            dto.setUserId(order.getUserId());
+            dto.setTotalPrice(order.getTotalPrice());
+            dto.setStatus(order.getStatus());
+            dto.setCreatedAt(order.getCreatedAt());
+            
+            List<TicketDTO> ticketDTOs = ticketRepository.findByOrderId(order.getId()).stream()
+                .map(ticket -> {
+                    TicketDTO tDto = new TicketDTO();
+                    tDto.setId(ticket.getId());
+                    tDto.setSeatId(ticket.getSeatId());
+                    tDto.setQrCodeToken(ticket.getQrCodeToken());
+                    return tDto;
+                }).collect(Collectors.toList());
+                
+            dto.setTickets(ticketDTOs);
+            return dto;
+        }).collect(Collectors.toList());
+    }
 }
