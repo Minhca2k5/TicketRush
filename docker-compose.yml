@@ -7,13 +7,14 @@ services:
       POSTGRES_PASSWORD: minh123
     ports:
       - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U minh -d ticketrush"]
       interval: 10s
       timeout: 5s
       retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d
 
   auth-service:
     build:
@@ -55,6 +56,41 @@ services:
         condition: service_started
       event-service:
         condition: service_started
+      booking-service:
+        condition: service_started
+      queue-service:
+        condition: service_started
+
+  booking-service:
+    build:
+      context: ./booking-service
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: booking_db
+      DB_USERNAME: minh
+      DB_PASSWORD: minh123
+      EVENT_SERVICE_URL: http://event-service:8080
+    ports:
+      - "8083:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  queue-service:
+    build:
+      context: ./queue-service
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: queue_db
+      DB_USERNAME: minh
+      DB_PASSWORD: minh123
+    ports:
+      - "8084:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   eventhaven-ui:
     build:

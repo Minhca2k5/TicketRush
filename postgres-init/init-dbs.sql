@@ -1,0 +1,2 @@
+CREATE DATABASE booking_db;
+CREATE DATABASE queue_db;
