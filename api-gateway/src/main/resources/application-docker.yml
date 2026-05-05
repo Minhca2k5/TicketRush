@@ -16,7 +16,15 @@ spring:
         - id: event-service
           uri: http://event-service:8080
           predicates:
-            - Path=/api/**
+            - Path=/api/events/**
+        - id: booking-service
+          uri: http://booking-service:8080
+          predicates:
+            - Path=/api/booking/**
+        - id: queue-service
+          uri: http://queue-service:8080
+          predicates:
+            - Path=/api/queue/**
 
 jwt:
   secret: mySuperSecretKeyThatIsAtLeast32CharactersLongForJWT
