@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { SeatSelector } from './SeatSelector';
+import { WaitingRoom } from './WaitingRoom';
 import { mapSeatLayoutToType, mapSeatsToType } from '@/lib/seat-types';
 import { getEventById, getSeatLayout, getSeatMap } from '../services/eventService';
 
@@ -10,6 +11,7 @@ export default function EventDetail() {
   const [seatLayout, setSeatLayout] = useState(null);
   const [seatInventory, setSeatInventory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isAdmitted, setIsAdmitted] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -56,6 +58,10 @@ export default function EventDetail() {
 
   if (!event) {
     return <div className="px-4 py-20 text-center text-red-500">Unable to load event.</div>;
+  }
+
+  if (!isAdmitted) {
+    return <WaitingRoom eventId={event.id || Number(id)} onAdmit={() => setIsAdmitted(true)} />;
   }
 
   return (
