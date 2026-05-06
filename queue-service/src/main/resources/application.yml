@@ -1,11 +1,11 @@
 server:
-  port: 8080
+  port: 8084
 
 spring:
   application:
     name: queue-service
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:queue_db}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:ticketrush}
     username: ${DB_USERNAME:minh}
     password: ${DB_PASSWORD:minh123}
   jpa:

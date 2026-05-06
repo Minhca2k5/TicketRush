@@ -1,2 +1,1 @@
-CREATE DATABASE booking_db;
-CREATE DATABASE queue_db;
+-- All services use the shared ticketrush database created by POSTGRES_DB.

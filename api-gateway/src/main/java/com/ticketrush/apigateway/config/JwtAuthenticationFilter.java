@@ -29,6 +29,7 @@ public class JwtAuthenticationFilter implements GlobalFilter {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getPath().toString();
         String traceId = exchange.getRequest().getId(); // Use request ID as trace ID
+        exchange.getResponse().getHeaders().set("X-Trace-Id", traceId);
 
         logger.info("Request [{}] to path: {}", traceId, path);
 
@@ -48,10 +49,16 @@ public class JwtAuthenticationFilter implements GlobalFilter {
         try {
             Key key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
             Claims claims = Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token).getBody();
+            String role = String.valueOf(claims.get("role"));
+            if (isForbidden(path, role)) {
+                logger.warn("Forbidden request [{}] to {} for role {}", traceId, path, role);
+                exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+                return exchange.getResponse().setComplete();
+            }
             logger.debug("JWT validated for request [{}]", traceId);
             ServerHttpRequest request = exchange.getRequest().mutate()
                     .header("X-User-Id", claims.getSubject())
-                    .header("X-User-Role", String.valueOf(claims.get("role")))
+                    .header("X-User-Role", role)
                     .header("X-Trace-Id", traceId)
                     .build();
             return chain.filter(exchange.mutate().request(request).build());
@@ -68,7 +75,10 @@ public class JwtAuthenticationFilter implements GlobalFilter {
         return HttpMethod.OPTIONS.equals(method)
                 || path.startsWith("/auth/login")
                 || path.startsWith("/auth/register")
-                || path.startsWith("/auth/profile")
                 || (HttpMethod.GET.equals(method) && path.startsWith("/api/events"));
+    }
+
+    private boolean isForbidden(String path, String role) {
+        return path.startsWith("/auth/dashboard") && !"ADMIN".equals(role);
     }
 }
