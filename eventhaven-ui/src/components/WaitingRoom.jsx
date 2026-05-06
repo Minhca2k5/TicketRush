@@ -43,6 +43,9 @@ export function WaitingRoom({ eventId, onAdmit }) {
       try {
         const joined = await joinQueue(eventId);
         applyStatus(joined);
+        if (joined.status === 'ALLOWED_TO_ENTER') {
+          return;
+        }
       } catch (err) {
         if (active) setError(err.response?.data?.message || err.response?.data?.error || 'Could not join the waiting room.');
         return;

@@ -21,6 +21,10 @@ export default function EventDetail() {
   }, [id]);
 
   useEffect(() => {
+    setIsAdmitted(window.sessionStorage.getItem(`ticketrush-admitted-${id}`) === 'true');
+  }, [id]);
+
+  useEffect(() => {
     let ignore = false;
 
     const load = async (isInitialLoad = false) => {
