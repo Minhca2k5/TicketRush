@@ -2,6 +2,7 @@ package com.ticketrush.authservice.service;
 
 import com.ticketrush.authservice.model.User;
 import com.ticketrush.authservice.dto.AuthDashboardResponse;
+import com.ticketrush.authservice.dto.AuthSettingsResponse;
 import com.ticketrush.authservice.exception.AuthServiceException;
 import com.ticketrush.authservice.repository.UserRepository;
 import io.jsonwebtoken.Jwts;
@@ -27,6 +28,15 @@ public class AuthService {
 
     @Value("${jwt.secret}")
     private String jwtSecret;
+
+    @Value("${jwt.expiration:86400000}")
+    private long jwtExpirationMs;
+
+    @Value("${app.seed.admin.username:admin}")
+    private String seededAdminUsername;
+
+    @Value("${app.seed.admin.email:admin@ticketrush.local}")
+    private String seededAdminEmail;
 
     public AuthService(UserRepository userRepository) {
         this.userRepository = userRepository;
@@ -68,7 +78,7 @@ public class AuthService {
                 .setSubject(user.getId().toString())
                 .claim("role", user.getRole())
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + 86400000)) // 24h
+                .setExpiration(new Date(System.currentTimeMillis() + jwtExpirationMs))
                 .signWith(key)
                 .compact();
     }
@@ -112,6 +122,20 @@ public class AuthService {
         if (user.getRole() != User.Role.ADMIN) {
             throw new AuthServiceException(HttpStatus.FORBIDDEN, "Admin role required");
         }
+    }
+
+    public List<User> getUsers() {
+        return userRepository.findAll();
+    }
+
+    public AuthSettingsResponse getSettings() {
+        return new AuthSettingsResponse(
+                "auth-service",
+                jwtExpirationMs,
+                seededAdminUsername,
+                seededAdminEmail,
+                "BCrypt"
+        );
     }
 
     public AuthDashboardResponse getDashboardSummary() {

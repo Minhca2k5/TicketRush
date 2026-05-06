@@ -79,6 +79,12 @@ public class JwtAuthenticationFilter implements GlobalFilter {
     }
 
     private boolean isForbidden(String path, String role) {
-        return path.startsWith("/auth/dashboard") && !"ADMIN".equals(role);
+        return isAdminEndpoint(path) && !"ADMIN".equals(role);
+    }
+
+    private boolean isAdminEndpoint(String path) {
+        return path.startsWith("/auth/dashboard")
+                || path.startsWith("/auth/users")
+                || path.startsWith("/auth/settings");
     }
 }

@@ -2,6 +2,7 @@ package com.ticketrush.authservice.controller;
 
 import com.ticketrush.authservice.dto.ApiResponse;
 import com.ticketrush.authservice.dto.AuthDashboardResponse;
+import com.ticketrush.authservice.dto.AuthSettingsResponse;
 import com.ticketrush.authservice.dto.LoginResponse;
 import com.ticketrush.authservice.dto.UserResponse;
 import com.ticketrush.authservice.exception.AuthServiceException;
@@ -11,6 +12,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/auth")
@@ -52,6 +55,21 @@ public class AuthController {
     public ResponseEntity<ApiResponse<AuthDashboardResponse>> getDashboardSummary(@RequestHeader("Authorization") String authHeader) {
         authService.requireAdmin(extractBearerToken(authHeader));
         return ResponseEntity.ok(ApiResponse.success(authService.getDashboardSummary()));
+    }
+
+    @GetMapping("/users")
+    public ResponseEntity<ApiResponse<List<UserResponse>>> getUsers(@RequestHeader("Authorization") String authHeader) {
+        authService.requireAdmin(extractBearerToken(authHeader));
+        List<UserResponse> users = authService.getUsers().stream()
+                .map(UserResponse::new)
+                .toList();
+        return ResponseEntity.ok(ApiResponse.success(users));
+    }
+
+    @GetMapping("/settings")
+    public ResponseEntity<ApiResponse<AuthSettingsResponse>> getSettings(@RequestHeader("Authorization") String authHeader) {
+        authService.requireAdmin(extractBearerToken(authHeader));
+        return ResponseEntity.ok(ApiResponse.success(authService.getSettings()));
     }
 
     private String extractBearerToken(String authHeader) {

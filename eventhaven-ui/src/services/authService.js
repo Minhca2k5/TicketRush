@@ -32,3 +32,13 @@ export async function getAuthDashboardSummary() {
   const response = await authApi.get('/auth/dashboard');
   return response.data?.data || response.data;
 }
+
+export async function getAuthUsers() {
+  const response = await authApi.get('/auth/users');
+  return response.data?.data || response.data;
+}
+
+export async function getAuthSettings() {
+  const response = await authApi.get('/auth/settings');
+  return response.data?.data || response.data;
+}
