@@ -1,56 +1,75 @@
 import { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { getAuthToken } from '../lib/auth';
 import { joinQueue, getQueueStatus } from '../services/queueService';
-
-const HOLDER_STORAGE_KEY = "ticketrush-seat-holder";
-function getOrCreateUserId() {
-  const existing = window.localStorage.getItem(HOLDER_STORAGE_KEY);
-  if (existing) return existing;
-  const generated = `holder-${crypto.randomUUID()}`;
-  window.localStorage.setItem(HOLDER_STORAGE_KEY, generated);
-  return generated;
-}
 
 export function WaitingRoom({ eventId, onAdmit }) {
   const [status, setStatus] = useState(null);
   const [error, setError] = useState(null);
-  const userIdRef = useRef(getOrCreateUserId());
+  const navigate = useNavigate();
+  const admitRef = useRef(onAdmit);
+  const admittedRef = useRef(false);
+
+  useEffect(() => {
+    admitRef.current = onAdmit;
+  }, [onAdmit]);
 
   useEffect(() => {
     let active = true;
+    let intervalId;
 
-    const pollStatus = async () => {
-      try {
-        const result = await getQueueStatus(eventId, userIdRef.current);
-        if (active) {
-          setStatus(result);
-          if (result.status === 'ALLOWED_TO_ENTER') {
-            onAdmit();
-          }
-        }
-      } catch (err) {
-        // Fallback to joining queue if not found
-        try {
-          const joinResult = await joinQueue(eventId, userIdRef.current);
-          if (active) {
-            setStatus(joinResult);
-            if (joinResult.status === 'ALLOWED_TO_ENTER') {
-              onAdmit();
-            }
-          }
-        } catch (joinErr) {
-          if (active) setError("Could not join the waiting room.");
-        }
+    const admit = () => {
+      if (!active || admittedRef.current) return;
+      admittedRef.current = true;
+      window.sessionStorage.setItem(`ticketrush-admitted-${eventId}`, 'true');
+      admitRef.current();
+    };
+
+    const applyStatus = (nextStatus) => {
+      if (!active) return;
+      setStatus(nextStatus);
+      setError(null);
+      if (nextStatus.status === 'ALLOWED_TO_ENTER') {
+        admit();
       }
     };
 
-    pollStatus();
-    const intervalId = setInterval(pollStatus, 3000); // Poll every 3s
+    const loadQueue = async () => {
+      if (!getAuthToken()) {
+        setError('Please sign in before entering the waiting room.');
+        return;
+      }
+
+      try {
+        const joined = await joinQueue(eventId);
+        applyStatus(joined);
+      } catch (err) {
+        if (active) setError(err.response?.data?.message || err.response?.data?.error || 'Could not join the waiting room.');
+        return;
+      }
+
+      intervalId = window.setInterval(async () => {
+        try {
+          const nextStatus = await getQueueStatus(eventId);
+          applyStatus(nextStatus);
+          if (nextStatus.status === 'ALLOWED_TO_ENTER') {
+            window.clearInterval(intervalId);
+          }
+        } catch (err) {
+          if (active) setError(err.response?.data?.message || err.response?.data?.error || 'Could not refresh your queue status.');
+        }
+      }, 3000);
+    };
+
+    loadQueue();
 
     return () => {
       active = false;
-      clearInterval(intervalId);
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
     };
-  }, [eventId, onAdmit]);
+  }, [eventId]);
 
   if (error) {
     return (
@@ -58,11 +77,11 @@ export function WaitingRoom({ eventId, onAdmit }) {
         <div className="text-4xl mb-4">⚠️</div>
         <h2 className="text-xl font-bold text-slate-800">Connection Error</h2>
         <p className="text-slate-500 mt-2">{error}</p>
-        <button 
-          onClick={() => window.location.reload()}
+        <button
+          onClick={() => (getAuthToken() ? window.location.reload() : navigate('/login'))}
           className="mt-6 px-6 py-2 bg-violet-600 text-white rounded-full font-bold shadow-lg"
         >
-          Try Again
+          {getAuthToken() ? 'Try Again' : 'Sign In'}
         </button>
       </div>
     );
