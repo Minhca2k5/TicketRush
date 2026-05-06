@@ -5,7 +5,13 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "queue_entries")
+@Table(
+        name = "queue_entries",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_queue_entries_event_user",
+                columnNames = {"event_id", "user_id"}
+        )
+)
 @Data
 public class QueueEntry {
     @Id
