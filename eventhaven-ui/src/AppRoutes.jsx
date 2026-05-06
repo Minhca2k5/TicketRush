@@ -92,6 +92,22 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/admin/help"
+        element={
+          <ProtectedRoute requiredRole="ADMIN">
+            <AdminUtilityPage type="help" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/status"
+        element={
+          <ProtectedRoute requiredRole="ADMIN">
+            <AdminUtilityPage type="status" />
+          </ProtectedRoute>
+        }
+      />
     </Routes>
   );
 }

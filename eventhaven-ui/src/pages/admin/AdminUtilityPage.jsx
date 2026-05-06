@@ -23,8 +23,8 @@ const sidebarMain = [
 ];
 
 const sidebarSupport = [
-  { label: 'Help & Support', icon: LifeBuoy },
-  { label: 'System Status', icon: ShieldCheck },
+  { label: 'Help & Support', icon: LifeBuoy, to: '/admin/help' },
+  { label: 'System Status', icon: ShieldCheck, to: '/admin/status' },
 ];
 
 const pageConfig = {
@@ -58,6 +58,26 @@ const pageConfig = {
       ['Frontend gateway', 'http://localhost:8080'],
     ],
   },
+  help: {
+    title: 'Help & Support',
+    subtitle: 'Use this checklist when debugging the admin demo flow.',
+    icon: LifeBuoy,
+    stats: [
+      ['First check', 'Restart changed services'],
+      ['Auth endpoint', 'http://localhost:8080/auth/*'],
+      ['Frontend', 'http://localhost:5173'],
+    ],
+  },
+  status: {
+    title: 'System Status',
+    subtitle: 'Verify the local services expected by the admin portal.',
+    icon: ShieldCheck,
+    stats: [
+      ['Gateway', 'localhost:8080'],
+      ['Auth Service', 'localhost:8081'],
+      ['UI', 'localhost:5173'],
+    ],
+  },
 };
 
 export default function AdminUtilityPage({ type }) {
@@ -75,22 +95,33 @@ export default function AdminUtilityPage({ type }) {
     let ignore = false;
 
     async function loadAdminData() {
+      if (type === 'help' || type === 'status') {
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError('');
       try {
-        const [userData, summaryData, settingsData] = await Promise.all([
+        const [userResult, summaryResult, settingsResult] = await Promise.allSettled([
           getAuthUsers(),
           getAuthDashboardSummary(),
           getAuthSettings(),
         ]);
         if (!ignore) {
+          const userData = userResult.status === 'fulfilled' ? userResult.value : [];
+          const summaryData = summaryResult.status === 'fulfilled' ? summaryResult.value : null;
+          const settingsData = settingsResult.status === 'fulfilled' ? settingsResult.value : null;
           setUsers(Array.isArray(userData) ? userData : []);
           setSummary(summaryData || null);
           setSettings(settingsData || null);
+          if (userResult.status === 'rejected' || summaryResult.status === 'rejected' || settingsResult.status === 'rejected') {
+            setError('Auth admin data is unavailable. Restart auth-service and api-gateway so /auth/users and /auth/settings are active.');
+          }
         }
       } catch (err) {
         if (!ignore) {
-          setError(err.response?.data?.error || 'Unable to load admin data from Auth Service.');
+          setError(err.response?.data?.error || 'Auth admin data is unavailable. Restart auth-service and api-gateway.');
         }
       } finally {
         if (!ignore) {
@@ -103,7 +134,7 @@ export default function AdminUtilityPage({ type }) {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [type]);
 
   const completedProfiles = summary?.profileCompletionCount || 0;
   const profileCompletionRate = summary?.userCount
@@ -127,6 +158,8 @@ export default function AdminUtilityPage({ type }) {
       ['JWT lifetime', settings?.jwtExpirationMs ? `${Math.round(settings.jwtExpirationMs / 3600000)} hours` : '24 hours'],
       ['Password encoding', settings?.passwordEncoding || 'BCrypt'],
     ],
+    help: pageConfig.help.stats,
+    status: pageConfig.status.stats,
   };
 
   const renderCustomerDatabase = () => (
@@ -220,16 +253,63 @@ export default function AdminUtilityPage({ type }) {
     </section>
   );
 
+  const renderHelp = () => (
+    <section className="mt-6 rounded-[28px] border border-[#dfe7f2] bg-white p-6 shadow-[0_12px_36px_rgba(15,23,42,0.05)]">
+      <h2 className="text-xl font-black text-slate-950">Demo Troubleshooting</h2>
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        {[
+          ['JWT expired', 'Logout, clear localStorage token, then login again.'],
+          ['Admin data unavailable', 'Restart auth-service and api-gateway after pulling latest code.'],
+          ['Queue page error', 'Make sure queue-service is running on port 8084.'],
+          ['Event details fail', 'Make sure event-service is running on port 8082.'],
+        ].map(([label, value]) => (
+          <div key={label} className="rounded-2xl bg-slate-50 px-4 py-3">
+            <p className="text-sm font-bold text-slate-700">{label}</p>
+            <p className="mt-2 text-sm leading-6 text-slate-500">{value}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+
+  const renderStatus = () => (
+    <section className="mt-6 rounded-[28px] border border-[#dfe7f2] bg-white p-6 shadow-[0_12px_36px_rgba(15,23,42,0.05)]">
+      <h2 className="text-xl font-black text-slate-950">Expected Local Services</h2>
+      <div className="mt-5 space-y-3">
+        {[
+          ['API Gateway', '8080', 'Routes frontend traffic and validates JWT.'],
+          ['Auth Service', '8081', 'Login, profile, customer database, admin settings.'],
+          ['Event Service', '8082', 'Events and seat maps.'],
+          ['Booking Service', '8083', 'Seat lock, checkout, tickets.'],
+          ['Queue Service', '8084', 'Waiting room admission.'],
+        ].map(([service, port, detail]) => (
+          <div key={service} className="flex flex-col gap-2 rounded-2xl bg-slate-50 px-4 py-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-black text-slate-950">{service}</p>
+              <p className="mt-1 text-sm text-slate-500">{detail}</p>
+            </div>
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">
+              localhost:{port}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+
   const renderBody = () => {
     if (loading) {
       return <div className="mt-6 rounded-[28px] bg-white px-6 py-16 text-center text-sm text-slate-500">Loading admin data...</div>;
     }
-    if (error) {
-      return <div className="mt-6 rounded-[28px] border border-amber-200 bg-amber-50 px-6 py-5 text-sm font-semibold text-amber-800">{error}</div>;
-    }
+    const errorBanner = error ? (
+      <div className="mt-6 rounded-[28px] border border-amber-200 bg-amber-50 px-6 py-5 text-sm font-semibold text-amber-800">{error}</div>
+    ) : null;
+    if (type === 'help') return renderHelp();
+    if (type === 'status') return renderStatus();
+    if (error && type === 'customers') return errorBanner;
     if (type === 'customers') return renderCustomerDatabase();
-    if (type === 'reports') return renderSystemReports();
-    return renderAdminSettings();
+    if (type === 'reports') return <>{errorBanner}{renderSystemReports()}</>;
+    return <>{errorBanner}{renderAdminSettings()}</>;
   };
 
   return (
@@ -271,12 +351,22 @@ export default function AdminUtilityPage({ type }) {
           <div className="mt-auto border-t border-[#e8edf4] px-5 py-7">
             <p className="px-4 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Support</p>
             <div className="mt-4 space-y-2">
-              {sidebarSupport.map(({ label, icon: Icon }) => (
-                <button key={label} type="button" className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900">
-                  <Icon size={17} />
-                  <span>{label}</span>
-                </button>
-              ))}
+              {sidebarSupport.map(({ label, icon: Icon, to }) => {
+                const isActive = location.pathname.startsWith(to);
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => navigate(to)}
+                    className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
+                      isActive ? 'bg-violet-50 text-violet-700 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.35)]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    }`}
+                  >
+                    <Icon size={17} />
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </aside>

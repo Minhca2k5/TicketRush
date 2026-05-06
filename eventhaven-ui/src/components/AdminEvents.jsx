@@ -33,8 +33,8 @@ const sidebarMain = [
 ];
 
 const sidebarSupport = [
-  { label: 'Help & Support', icon: LifeBuoy },
-  { label: 'System Status', icon: ShieldCheck },
+  { label: 'Help & Support', icon: LifeBuoy, to: '/admin/help' },
+  { label: 'System Status', icon: ShieldCheck, to: '/admin/status' },
 ];
 
 const statusFilters = ['All', 'Live', 'Draft', 'Past', 'Pending'];
@@ -268,12 +268,22 @@ export default function AdminEvents() {
           <div className="mt-auto border-t border-[#e8edf4] px-5 py-7">
             <p className="px-4 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Support</p>
             <div className="mt-4 space-y-2">
-              {sidebarSupport.map(({ label, icon: Icon }) => (
-                <button key={label} type="button" className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900">
-                  <Icon size={17} />
-                  <span>{label}</span>
-                </button>
-              ))}
+              {sidebarSupport.map(({ label, icon: Icon, to }) => {
+                const isActive = location.pathname.startsWith(to);
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => navigate(to)}
+                    className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
+                      isActive ? 'bg-violet-50 text-violet-700 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.35)]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    }`}
+                  >
+                    <Icon size={17} />
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </aside>
