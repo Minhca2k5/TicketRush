@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import axios from 'axios';
-import { getAuthToken } from '../lib/auth';
+import { getProfile, updateProfile } from '../services/authService';
 
 const Profile = () => {
   const [profile, setProfile] = useState({ username: '', email: '', role: '', age: '', gender: '' });
@@ -12,10 +11,7 @@ const Profile = () => {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const response = await axios.get('/auth/profile', {
-          headers: { Authorization: `Bearer ${getAuthToken()}` },
-        });
-        const user = response.data.data;
+        const user = await getProfile();
         setProfile({
           username: user.username || '',
           email: user.email || '',
@@ -39,16 +35,11 @@ const Profile = () => {
     setMessage('');
 
     try {
-      const response = await axios.put(
-        '/auth/profile',
-        {
-          email: profile.email,
-          age: profile.age ? Number(profile.age) : null,
-          gender: profile.gender || null,
-        },
-        { headers: { Authorization: `Bearer ${getAuthToken()}` } },
-      );
-      const user = response.data.data;
+      const user = await updateProfile({
+        email: profile.email,
+        age: profile.age ? Number(profile.age) : null,
+        gender: profile.gender || null,
+      });
       setProfile((current) => ({ ...current, age: user.age || '', gender: user.gender || '', email: user.email || '' }));
       setMessage('Profile updated');
     } catch (err) {

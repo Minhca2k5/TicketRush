@@ -4,9 +4,11 @@ import com.ticketrush.authservice.dto.ApiResponse;
 import com.ticketrush.authservice.dto.AuthDashboardResponse;
 import com.ticketrush.authservice.dto.LoginResponse;
 import com.ticketrush.authservice.dto.UserResponse;
+import com.ticketrush.authservice.exception.AuthServiceException;
 import com.ticketrush.authservice.model.User;
 import com.ticketrush.authservice.service.AuthService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -34,21 +36,29 @@ public class AuthController {
 
     @GetMapping("/profile")
     public ResponseEntity<ApiResponse<UserResponse>> getProfile(@RequestHeader("Authorization") String authHeader) {
-        String token = authHeader.replace("Bearer ", "");
+        String token = extractBearerToken(authHeader);
         User user = authService.getProfile(token);
         return ResponseEntity.ok(ApiResponse.success(new UserResponse(user)));
     }
 
     @PutMapping("/profile")
     public ResponseEntity<ApiResponse<UserResponse>> updateProfile(@RequestHeader("Authorization") String authHeader, @RequestBody User updates) {
-        String token = authHeader.replace("Bearer ", "");
+        String token = extractBearerToken(authHeader);
         User updatedUser = authService.updateProfile(token, updates);
         return ResponseEntity.ok(ApiResponse.success(new UserResponse(updatedUser)));
     }
 
     @GetMapping("/dashboard")
-    public ResponseEntity<ApiResponse<AuthDashboardResponse>> getDashboardSummary() {
+    public ResponseEntity<ApiResponse<AuthDashboardResponse>> getDashboardSummary(@RequestHeader("Authorization") String authHeader) {
+        authService.requireAdmin(extractBearerToken(authHeader));
         return ResponseEntity.ok(ApiResponse.success(authService.getDashboardSummary()));
+    }
+
+    private String extractBearerToken(String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            throw new AuthServiceException(HttpStatus.UNAUTHORIZED, "Missing or invalid Authorization header");
+        }
+        return authHeader.substring(7);
     }
 
     public static class LoginRequest {

@@ -10,10 +10,10 @@ import {
   Ticket,
   TrendingUp,
   Users,
-  Wallet,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { getAuthDashboardSummary } from '../services/authService';
 import { UserMenu } from './UserMenu';
 
 const sidebarMain = [
@@ -55,21 +55,29 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const [events, setEvents] = useState([]);
+  const [authSummary, setAuthSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState('');
 
   useEffect(() => {
     let ignore = false;
 
-    const loadEvents = async () => {
+    const loadDashboard = async () => {
       try {
-        const response = await api.get('/events');
-        const raw = response.data?.data?.content || response.data?.data || response.data || [];
+        const [eventsResponse, authData] = await Promise.all([
+          api.get('/events'),
+          getAuthDashboardSummary(),
+        ]);
+        const raw = eventsResponse.data?.data?.content || eventsResponse.data?.data || eventsResponse.data || [];
         if (!ignore) {
           setEvents(Array.isArray(raw) ? raw : []);
+          setAuthSummary(authData || null);
         }
-      } catch {
+      } catch (error) {
         if (!ignore) {
           setEvents([]);
+          setAuthSummary(null);
+          setSummaryError(error.response?.data?.error || 'Dashboard metrics are temporarily unavailable.');
         }
       } finally {
         if (!ignore) {
@@ -78,7 +86,7 @@ export default function AdminDashboard() {
       }
     };
 
-    loadEvents();
+    loadDashboard();
     return () => {
       ignore = true;
     };
@@ -87,50 +95,56 @@ export default function AdminDashboard() {
   const dashboardMetrics = useMemo(() => {
     const totalEvents = events.length;
     const liveEvents = events.filter((event) => inferStatus(event) === 'LIVE').length;
-    const projectedRevenue = events.reduce((sum, _event, index) => sum + (8500 + index * 2100), 0);
-    const pendingApprovals = events.filter((event) => inferStatus(event) === 'PENDING').length;
+    const totalUsers = authSummary?.userCount || 0;
+    const profileCompletionRate = totalUsers
+      ? Math.round(((authSummary?.profileCompletionCount || 0) / totalUsers) * 100)
+      : 0;
 
     return [
       {
-        label: 'Total Active Events',
+        label: 'Catalog Events',
         value: totalEvents,
-        delta: '+12% vs last week',
+        delta: `${liveEvents} live now`,
         icon: BarChart3,
         surface: 'from-sky-50 to-blue-50',
         iconBg: 'bg-sky-100 text-sky-600',
       },
       {
-        label: 'Live Events',
-        value: liveEvents,
-        delta: '+5% vs yesterday',
-        icon: Ticket,
+        label: 'Registered Users',
+        value: totalUsers,
+        delta: `${authSummary?.customerCount || 0} customers`,
+        icon: Users,
         surface: 'from-emerald-50 to-green-50',
         iconBg: 'bg-emerald-100 text-emerald-600',
       },
       {
-        label: 'Projected Revenue',
-        value: `$${projectedRevenue.toLocaleString()}`,
-        delta: '+23% vs last month',
-        icon: Wallet,
+        label: 'Profile Completion',
+        value: `${profileCompletionRate}%`,
+        delta: `${authSummary?.profileCompletionCount || 0} complete profiles`,
+        icon: ShieldCheck,
         surface: 'from-fuchsia-50 to-violet-50',
         iconBg: 'bg-violet-100 text-violet-600',
       },
       {
-        label: 'Pending Approvals',
-        value: pendingApprovals,
-        delta: pendingApprovals ? `${pendingApprovals} waiting review` : 'No pending approvals',
+        label: 'Average Age',
+        value: authSummary?.averageAge ? Math.round(authSummary.averageAge) : 0,
+        delta: `${authSummary?.adminCount || 0} admin accounts`,
         icon: TrendingUp,
         surface: 'from-amber-50 to-orange-50',
         iconBg: 'bg-amber-100 text-amber-600',
       },
     ];
-  }, [events]);
+  }, [authSummary, events]);
 
   const recentEvents = useMemo(() => (
     [...events]
       .sort((first, second) => new Date(second.startTime || 0) - new Date(first.startTime || 0))
       .slice(0, 5)
   ), [events]);
+
+  const demographicTotal = (authSummary?.maleCount || 0) + (authSummary?.femaleCount || 0);
+  const malePercent = demographicTotal ? Math.round(((authSummary?.maleCount || 0) / demographicTotal) * 100) : 0;
+  const femalePercent = demographicTotal ? 100 - malePercent : 0;
 
   return (
     <div className="min-h-screen bg-[#f4f7fb] font-sans text-slate-900">
@@ -205,7 +219,7 @@ export default function AdminDashboard() {
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
               <div>
                 <h1 className="text-3xl font-black tracking-tight text-slate-950">Event Overview Dashboard</h1>
-                <p className="mt-2 text-sm text-slate-500">Track live inventory, upcoming events, and admin-side event performance.</p>
+                <p className="mt-2 text-sm text-slate-500">Track event inventory, users, and profile demographics from the live services.</p>
               </div>
               <button
                 onClick={() => navigate('/admin/events')}
@@ -233,20 +247,57 @@ export default function AdminDashboard() {
               ))}
             </section>
 
+            {summaryError && (
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                {summaryError}
+              </div>
+            )}
+
             <section className="mt-6 grid gap-6 xl:grid-cols-2">
               <div className="rounded-[28px] border border-[#dfe7f2] bg-white p-6 shadow-[0_12px_36px_rgba(15,23,42,0.05)]">
-                <h2 className="text-xl font-black text-slate-950">Event Growth Trend</h2>
-                <p className="mt-2 text-sm text-slate-500">Last 30 days</p>
-                <div className="mt-6 flex h-[240px] items-center justify-center rounded-[24px] border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400">
-                  Chart area placeholder
+                <h2 className="text-xl font-black text-slate-950">Audience Demographics</h2>
+                <p className="mt-2 text-sm text-slate-500">Gender split from completed customer profiles.</p>
+                <div className="mt-6 space-y-5">
+                  <div>
+                    <div className="mb-2 flex items-center justify-between text-sm font-bold text-slate-600">
+                      <span>Male</span>
+                      <span>{authSummary?.maleCount || 0} users</span>
+                    </div>
+                    <div className="h-4 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-sky-500" style={{ width: `${malePercent}%` }} />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mb-2 flex items-center justify-between text-sm font-bold text-slate-600">
+                      <span>Female</span>
+                      <span>{authSummary?.femaleCount || 0} users</span>
+                    </div>
+                    <div className="h-4 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-violet-500" style={{ width: `${femalePercent}%` }} />
+                    </div>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">
+                    {demographicTotal} users have supplied demographic details.
+                  </div>
                 </div>
               </div>
 
               <div className="rounded-[28px] border border-[#dfe7f2] bg-white p-6 shadow-[0_12px_36px_rgba(15,23,42,0.05)]">
-                <h2 className="text-xl font-black text-slate-950">Ticket Sales by Category</h2>
-                <p className="mt-2 text-sm text-slate-500">Distribution across event types</p>
-                <div className="mt-6 flex h-[240px] items-center justify-center rounded-[24px] border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400">
-                  Chart area placeholder
+                <h2 className="text-xl font-black text-slate-950">Account Mix</h2>
+                <p className="mt-2 text-sm text-slate-500">Admin and customer distribution from auth-service.</p>
+                <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-3xl bg-emerald-50 p-5">
+                    <p className="text-sm font-bold text-emerald-700">Customers</p>
+                    <p className="mt-3 text-4xl font-black text-emerald-950">{authSummary?.customerCount || 0}</p>
+                  </div>
+                  <div className="rounded-3xl bg-violet-50 p-5">
+                    <p className="text-sm font-bold text-violet-700">Admins</p>
+                    <p className="mt-3 text-4xl font-black text-violet-950">{authSummary?.adminCount || 0}</p>
+                  </div>
+                  <div className="rounded-3xl bg-slate-50 p-5 sm:col-span-2">
+                    <p className="text-sm font-bold text-slate-600">Completed Profiles</p>
+                    <p className="mt-3 text-4xl font-black text-slate-950">{authSummary?.profileCompletionCount || 0}</p>
+                  </div>
                 </div>
               </div>
             </section>

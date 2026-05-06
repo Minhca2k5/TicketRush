@@ -107,6 +107,13 @@ public class AuthService {
         return saved;
     }
 
+    public void requireAdmin(String token) {
+        User user = getProfile(token);
+        if (user.getRole() != User.Role.ADMIN) {
+            throw new AuthServiceException(HttpStatus.FORBIDDEN, "Admin role required");
+        }
+    }
+
     public AuthDashboardResponse getDashboardSummary() {
         List<User> users = userRepository.findAll();
         long adminCount = users.stream().filter(user -> user.getRole() == User.Role.ADMIN).count();
