@@ -20,9 +20,9 @@ const sidebarMain = [
   { label: 'Dashboard', icon: BarChart3, to: '/admin/dashboard' },
   { label: 'Events Management', icon: CalendarDays, to: '/admin/events' },
   { label: 'Ticket Sales', icon: Ticket, to: '/admin/sales' },
-  { label: 'Customer Database', icon: Users },
-  { label: 'System Reports', icon: FileBarChart2 },
-  { label: 'Admin Settings', icon: Settings },
+  { label: 'Customer Database', icon: Users, to: '/admin/customers' },
+  { label: 'System Reports', icon: FileBarChart2, to: '/admin/reports' },
+  { label: 'Admin Settings', icon: Settings, to: '/admin/settings' },
 ];
 
 const sidebarSupport = [
