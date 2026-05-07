@@ -3,6 +3,7 @@ import { ArrowLeft, CalendarDays, MapPin, Ticket, UserRound } from 'lucide-react
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import AdminSeatMapPreview from './admin/AdminSeatMapPreview';
+import SeatMapRenderer from './seat-map/SeatMapRenderer';
 
 const fallbackEvent = {
   id: 1,
@@ -92,6 +93,8 @@ export default function AdminEventDetail() {
       tiers: event.priceTiers?.length || 0,
     };
   }, [event]);
+
+  const hasCoordinateLayout = event?.seatLayout?.zones?.length > 0;
 
   if (loading) {
     return <div className="px-8 py-16 text-sm text-slate-500">Loading event details...</div>;
@@ -190,7 +193,27 @@ export default function AdminEventDetail() {
         </div>
       </section>
 
-      <AdminSeatMapPreview eventId={id} />
+      <section className="mt-6">
+        {hasCoordinateLayout ? (
+          <div className="rounded-[32px] border border-[#dfe7f2] bg-white p-6 shadow-[0_16px_48px_rgba(15,23,42,0.05)]">
+            <div className="mb-4">
+              <h2 className="text-2xl font-black text-slate-950">Seat Layout Preview</h2>
+              <p className="mt-2 text-sm text-slate-500">
+                View mode uses the same coordinate-based layout that customers see during booking.
+              </p>
+            </div>
+            <SeatMapRenderer
+              isEditable={false}
+              eventId={id}
+              layout={event.seatLayout}
+              liveSeats={event.seats || []}
+              selectedSeats={[]}
+            />
+          </div>
+        ) : null}
+      </section>
+
+      {!hasCoordinateLayout ? <AdminSeatMapPreview eventId={id} /> : null}
     </div>
   );
 }

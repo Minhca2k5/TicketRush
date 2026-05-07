@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import api from '../services/api';
+import SeatMapRenderer from './seat-map/SeatMapRenderer';
 
 const EMPTY_FORM = {
   name: '',
@@ -14,19 +15,13 @@ const EMPTY_FORM = {
   venueAddress: '',
   zones: [],
   tiers: [],
+  seatLayout: null,
 };
 
 const categories = ['Concert', 'Sport', 'Theater', 'Conference', 'General'];
 
 const inputCls = (error) =>
   `w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition ${
-    error
-      ? 'border-red-400 focus:ring-2 focus:ring-red-200'
-      : 'border-slate-200 focus:border-violet-400 focus:ring-2 focus:ring-violet-100'
-  }`;
-
-const smallInputCls = (error) =>
-  `w-full rounded-lg border px-3 py-2 text-sm outline-none transition ${
     error
       ? 'border-red-400 focus:ring-2 focus:ring-red-200'
       : 'border-slate-200 focus:border-violet-400 focus:ring-2 focus:ring-violet-100'
@@ -52,54 +47,12 @@ function toDateTimeLocal(value) {
   return local.toISOString().slice(0, 16);
 }
 
-function createZoneState(zone = {}) {
-  return {
-    key: zone.key || (zone.id ? `zone-${zone.id}` : `zone-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
-    id: zone.id || null,
-    name: zone.name || '',
-    description: zone.description || '',
-    rows: zone.rows ?? '',
-    seatsPerRow: zone.seatsPerRow ?? '',
-    rowPrefix: zone.rowPrefix || 'A',
-    seatCount: zone.seatCount || 0,
-  };
-}
-
-function createTierState(tier = {}, zones = []) {
-  const matchedZone = zones.find((zone) => zone.id && tier.zoneId && String(zone.id) === String(tier.zoneId))
-    || zones.find((zone) => zone.name && tier.zoneName && zone.name.toLowerCase() === tier.zoneName.toLowerCase());
-
-  return {
-    key: tier.key || `tier-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    zoneKey: matchedZone?.key || '',
-    tierName: tier.tierName || '',
-    price: tier.price != null ? String(tier.price) : '',
-  };
-}
-
 function normalizeInitial(initial) {
   if (!initial) {
     return {
       ...EMPTY_FORM,
-      zones: [createZoneState()],
-      tiers: [createTierState()],
     };
   }
-
-  const normalizedZones = (initial.zones?.length ? initial.zones : []).map((zone) => createZoneState(zone));
-  const seedZones = normalizedZones.length ? [...normalizedZones] : [];
-  const rawTiers = initial.priceTiers?.length ? initial.priceTiers : [];
-
-  if (!seedZones.length && rawTiers.length) {
-    rawTiers.forEach((tier) => {
-      if (tier.zoneName && !seedZones.some((zone) => zone.name.toLowerCase() === tier.zoneName.toLowerCase())) {
-        seedZones.push(createZoneState({ name: tier.zoneName, description: '', rowPrefix: 'A' }));
-      }
-    });
-  }
-
-  const finalZones = seedZones.length ? seedZones : [createZoneState()];
-  const finalTiers = rawTiers.length ? rawTiers.map((tier) => createTierState(tier, finalZones)) : [createTierState({}, finalZones)];
 
   return {
     name: initial.name || '',
@@ -112,16 +65,33 @@ function normalizeInitial(initial) {
     venueId: initial.venue?.id || '',
     venueName: initial.venue?.name || '',
     venueAddress: initial.venue?.address || initial.location || '',
-    zones: finalZones,
-    tiers: finalTiers,
+    seatLayout: parseSeatLayout(initial.seatLayout || initial.seatLayoutJson),
   };
 }
 
-function formatSeatProjection(zone) {
-  const rows = Number(zone.rows || 0);
-  const seatsPerRow = Number(zone.seatsPerRow || 0);
-  if (!rows || !seatsPerRow) return null;
-  return rows * seatsPerRow;
+function parseSeatLayout(seatLayout) {
+  if (!seatLayout) return null;
+  if (typeof seatLayout === 'string') {
+    try {
+      return JSON.parse(seatLayout);
+    } catch {
+      return null;
+    }
+  }
+  return seatLayout;
+}
+
+function getLayoutZones(seatLayout) {
+  const parsedLayout = parseSeatLayout(seatLayout);
+  if (Array.isArray(parsedLayout?.zones)) return parsedLayout.zones;
+  if (Array.isArray(parsedLayout?.venue_zones)) return parsedLayout.venue_zones;
+  return [];
+}
+
+function persistedNumericId(value) {
+  if (value == null || value === '') return null;
+  const numeric = Number(value);
+  return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
 }
 
 export default function EventFormModal({ initial, onClose, onSaved }) {
@@ -136,51 +106,17 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
     setErrors({});
   }, [initial]);
 
-  const zoneOptions = useMemo(
-    () => form.zones.filter((zone) => zone.name.trim()),
-    [form.zones]
-  );
-
   const setField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
 
-  const updateZone = (zoneKey, field, value) => {
-    setForm((current) => ({
-      ...current,
-      zones: current.zones.map((zone) => (zone.key === zoneKey ? { ...zone, [field]: value } : zone)),
-    }));
-  };
-
-  const addZone = () => {
-    setForm((current) => ({ ...current, zones: [...current.zones, createZoneState()] }));
-  };
-
-  const removeZone = (zoneKey) => {
-    setForm((current) => ({
-      ...current,
-      zones: current.zones.filter((zone) => zone.key !== zoneKey),
-      tiers: current.tiers.map((tier) => (tier.zoneKey === zoneKey ? { ...tier, zoneKey: '' } : tier)),
-    }));
-  };
-
-  const updateTier = (tierKey, field, value) => {
-    setForm((current) => ({
-      ...current,
-      tiers: current.tiers.map((tier) => (tier.key === tierKey ? { ...tier, [field]: value } : tier)),
-    }));
-  };
-
-  const addTier = () => {
-    setForm((current) => ({ ...current, tiers: [...current.tiers, createTierState({}, current.zones)] }));
-  };
-
-  const removeTier = (tierKey) => {
-    setForm((current) => ({
-      ...current,
-      tiers: current.tiers.filter((tier) => tier.key !== tierKey),
-    }));
-  };
+  const layoutZones = getLayoutZones(form.seatLayout);
+  const isSeatLayoutReady = layoutZones.length > 0 && layoutZones.every((zone) => (
+    String(zone.name || '').trim()
+    && Number(zone.price || 0) > 0
+    && Number(zone.rows || 0) > 0
+    && Number(zone.seatsPerRow || 0) > 0
+  ));
 
   const validate = () => {
     const nextErrors = {};
@@ -197,67 +133,28 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
     }
 
     if (step === 3) {
+      const layoutZones = getLayoutZones(form.seatLayout);
       const zoneNames = new Set();
-      const tierZoneKeys = new Set();
 
-      if (!form.zones.length) {
-        nextErrors.zones = 'Add at least one zone';
+      if (!layoutZones.length) {
+        nextErrors.seatLayout = 'Add at least one zone to the canvas.';
       }
 
-      form.zones.forEach((zone, index) => {
-        const trimmedName = zone.name.trim();
-        if (!trimmedName) {
-          nextErrors[`zone_${zone.key}_name`] = 'Zone name is required';
-          return;
-        }
+      layoutZones.forEach((zone, index) => {
+        const name = String(zone.name || '').trim();
+        const price = Number(zone.price || 0);
+        const rows = Number(zone.rows || 0);
+        const seatsPerRow = Number(zone.seatsPerRow || 0);
 
-        const normalizedName = trimmedName.toLowerCase();
-        if (zoneNames.has(normalizedName)) {
-          nextErrors[`zone_${zone.key}_name`] = 'Zone name must be unique';
+        if (!name) nextErrors[`layout_zone_${index}`] = 'Each zone needs a name.';
+        if (name) {
+          const normalizedName = name.toLowerCase();
+          if (zoneNames.has(normalizedName)) nextErrors[`layout_zone_${index}`] = 'Zone names must be unique.';
+          zoneNames.add(normalizedName);
         }
-        zoneNames.add(normalizedName);
-
-        const rows = zone.rows === '' ? null : Number(zone.rows);
-        const seatsPerRow = zone.seatsPerRow === '' ? null : Number(zone.seatsPerRow);
-
-        if ((rows && !seatsPerRow) || (!rows && seatsPerRow)) {
-          nextErrors[`zone_${zone.key}_layout`] = 'Rows and seats per row must be filled together';
-        }
-
-        if (rows != null && (Number.isNaN(rows) || rows < 1 || rows > 30)) {
-          nextErrors[`zone_${zone.key}_rows`] = 'Rows must be between 1 and 30';
-        }
-
-        if (seatsPerRow != null && (Number.isNaN(seatsPerRow) || seatsPerRow < 1 || seatsPerRow > 50)) {
-          nextErrors[`zone_${zone.key}_seats`] = 'Seats per row must be between 1 and 50';
-        }
-
-        if (!zone.rowPrefix.trim()) {
-          nextErrors[`zone_${zone.key}_prefix`] = 'Starting row label is required';
-        }
-
-        if (index === 0 && !form.tiers.length) {
-          nextErrors.tiers = 'Add at least one ticket tier';
-        }
-      });
-
-      form.tiers.forEach((tier) => {
-        if (!tier.zoneKey) {
-          nextErrors[`tier_${tier.key}_zone`] = 'Select a zone';
-        } else if (tierZoneKeys.has(tier.zoneKey)) {
-          nextErrors[`tier_${tier.key}_zone`] = 'Each zone can only be used once';
-        } else {
-          tierZoneKeys.add(tier.zoneKey);
-        }
-
-        if (!tier.tierName.trim()) {
-          nextErrors[`tier_${tier.key}_name`] = 'Tier name is required';
-        }
-
-        const price = Number(tier.price);
-        if (!tier.price || Number.isNaN(price) || price <= 0) {
-          nextErrors[`tier_${tier.key}_price`] = 'Price must be greater than 0';
-        }
+        if (!price || Number.isNaN(price) || price <= 0) nextErrors[`layout_zone_${index}_price`] = 'Each zone needs a price greater than 0.';
+        if (!rows || Number.isNaN(rows) || rows < 1) nextErrors[`layout_zone_${index}_rows`] = 'Each zone needs at least one row.';
+        if (!seatsPerRow || Number.isNaN(seatsPerRow) || seatsPerRow < 1) nextErrors[`layout_zone_${index}_seats`] = 'Each zone needs seats per row.';
       });
     }
 
@@ -280,7 +177,7 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
 
     setSaving(true);
     try {
-      const totalCapacity = form.zones.reduce((sum, zone) => sum + (formatSeatProjection(zone) || 0), 0);
+      const totalCapacity = layoutZones.reduce((sum, zone) => sum + Number(zone.seats?.length || 0), 0);
 
       const payload = {
         name: form.name.trim(),
@@ -297,26 +194,26 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
           address: form.venueAddress.trim(),
           totalCapacity,
         },
-        zones: form.zones
-          .filter((zone) => zone.name.trim())
-          .map((zone) => ({
-            id: zone.id || null,
-            name: zone.name.trim(),
-            description: zone.description.trim() || null,
-            rows: zone.rows === '' ? null : Number(zone.rows),
-            seatsPerRow: zone.seatsPerRow === '' ? null : Number(zone.seatsPerRow),
-            rowPrefix: zone.rowPrefix.trim() || 'A',
-            seatCount: formatSeatProjection(zone) || zone.seatCount || 0,
-          })),
-        priceTiers: form.tiers.map((tier) => {
-          const linkedZone = form.zones.find((zone) => zone.key === tier.zoneKey);
-          return {
-            zoneId: linkedZone?.id || null,
-            zoneName: linkedZone?.name?.trim() || '',
-            tierName: tier.tierName.trim(),
-            price: Number(tier.price),
-          };
-        }),
+        zones: layoutZones.map((zone) => ({
+          id: persistedNumericId(zone.id),
+          name: String(zone.name || '').trim(),
+          description: 'RECTANGLE layout zone',
+          rows: Number(zone.rows || 0),
+          seatsPerRow: Number(zone.seatsPerRow || 0),
+          rowPrefix: zone.rowLabel || 'A',
+          seatCount: Number(zone.seats?.length || 0),
+          layoutX: zone.absoluteCenter?.x ?? null,
+          layoutY: zone.absoluteCenter?.y ?? null,
+          rotation: Number(zone.rotation || 0),
+          shapeType: 'RECTANGLE',
+        })),
+        priceTiers: layoutZones.map((zone) => ({
+          zoneId: persistedNumericId(zone.id),
+          zoneName: String(zone.name || '').trim(),
+          tierName: String(zone.name || '').trim(),
+          price: Number(zone.price || 0),
+        })),
+        seatLayout: form.seatLayout,
       };
 
       const response = initial?.id
@@ -336,7 +233,7 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-[28px] bg-white shadow-2xl">
+      <div className={`flex max-h-[96vh] w-full flex-col rounded-[28px] bg-white shadow-2xl ${step === 3 ? 'max-w-[96vw] 2xl:max-w-7xl' : 'max-w-3xl'}`}>
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div>
             <h2 className="text-base font-bold text-slate-950">{initial ? 'Edit Event' : 'Create New Event'}</h2>
@@ -482,181 +379,49 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
 
           {step === 3 && (
             <>
-              <div className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-700">Seat Zones</p>
-                    <p className="mt-1 text-xs text-slate-500">Create seating sections here. Each zone can generate its own seat grid automatically.</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={addZone}
-                    className="rounded-xl border border-violet-200 bg-white px-4 py-2 text-sm font-semibold text-violet-700 transition hover:border-violet-300 hover:bg-violet-50"
-                  >
-                    + Add Zone
-                  </button>
+              <div className="rounded-2xl border border-violet-100 bg-white p-4">
+                <div className="mb-4">
+                  <p className="text-sm font-semibold text-slate-700">Interactive Seat Layout Builder</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Use the builder sidebar as the only source for Zone Name, Price, Rows, Seats per Row, shape, and layout coordinates.
+                  </p>
                 </div>
 
-                {errors.zones && <p className="mt-3 text-xs text-red-500">{errors.zones}</p>}
+                {errors.seatLayout ? (
+                  <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-600">
+                    {errors.seatLayout}
+                  </p>
+                ) : null}
 
-                <div className="mt-4 space-y-4">
-                  {form.zones.map((zone, index) => {
-                    const seatProjection = formatSeatProjection(zone);
-                    return (
-                      <div key={zone.key} className="rounded-2xl border border-slate-200 bg-white p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-sm font-semibold text-slate-700">Zone {index + 1}</p>
-                          {form.zones.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeZone(zone.key)}
-                              className="text-xs font-semibold text-red-500 transition hover:text-red-600"
-                            >
-                              Remove
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="mt-3 grid gap-3 md:grid-cols-2">
-                          <Field label="Zone Name *" error={errors[`zone_${zone.key}_name`]}>
-                            <input
-                              className={smallInputCls(errors[`zone_${zone.key}_name`])}
-                              placeholder="e.g. VIP"
-                              value={zone.name}
-                              onChange={(event) => updateZone(zone.key, 'name', event.target.value)}
-                            />
-                          </Field>
-
-                          <Field label="Description">
-                            <input
-                              className={smallInputCls()}
-                              placeholder="Front section, balcony, standing area..."
-                              value={zone.description}
-                              onChange={(event) => updateZone(zone.key, 'description', event.target.value)}
-                            />
-                          </Field>
-                        </div>
-
-                        <div className="mt-3 grid gap-3 md:grid-cols-3">
-                          <Field label="Rows" error={errors[`zone_${zone.key}_rows`] || errors[`zone_${zone.key}_layout`]}>
-                            <input
-                              type="number"
-                              min="1"
-                              max="30"
-                              className={smallInputCls(errors[`zone_${zone.key}_rows`] || errors[`zone_${zone.key}_layout`])}
-                              value={zone.rows}
-                              onChange={(event) => updateZone(zone.key, 'rows', event.target.value)}
-                            />
-                          </Field>
-
-                          <Field label="Seats / Row" error={errors[`zone_${zone.key}_seats`] || errors[`zone_${zone.key}_layout`]}>
-                            <input
-                              type="number"
-                              min="1"
-                              max="50"
-                              className={smallInputCls(errors[`zone_${zone.key}_seats`] || errors[`zone_${zone.key}_layout`])}
-                              value={zone.seatsPerRow}
-                              onChange={(event) => updateZone(zone.key, 'seatsPerRow', event.target.value)}
-                            />
-                          </Field>
-
-                          <Field label="Starting Row Label" error={errors[`zone_${zone.key}_prefix`]}>
-                            <input
-                              className={smallInputCls(errors[`zone_${zone.key}_prefix`])}
-                              maxLength={3}
-                              value={zone.rowPrefix}
-                              onChange={(event) => updateZone(zone.key, 'rowPrefix', event.target.value)}
-                            />
-                          </Field>
-                        </div>
-
-                        {seatProjection ? (
-                          <p className="mt-2 text-xs font-semibold text-violet-600">
-                            This zone will generate {seatProjection} seats automatically.
-                          </p>
-                        ) : (
-                          <p className="mt-2 text-xs text-slate-400">
-                            Leave Rows and Seats / Row blank if you only want to keep the zone for later.
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-700">Ticket Tiers</p>
-                    <p className="mt-1 text-xs text-slate-500">Attach each tier to a zone so the backend can map pricing and seat generation correctly.</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={addTier}
-                    className="rounded-xl border border-violet-200 bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700"
-                  >
-                    + Add Tier
-                  </button>
-                </div>
-
-                {errors.tiers && <p className="mt-3 text-xs text-red-500">{errors.tiers}</p>}
-
-                <div className="mt-4 space-y-4">
-                  {form.tiers.map((tier, index) => (
-                    <div key={tier.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-semibold text-slate-700">Tier {index + 1}</p>
-                        {form.tiers.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeTier(tier.key)}
-                            className="text-xs font-semibold text-red-500 transition hover:text-red-600"
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="mt-3 grid gap-3 md:grid-cols-3">
-                        <Field label="Zone *" error={errors[`tier_${tier.key}_zone`]}>
-                          <select
-                            className={smallInputCls(errors[`tier_${tier.key}_zone`])}
-                            value={tier.zoneKey}
-                            onChange={(event) => updateTier(tier.key, 'zoneKey', event.target.value)}
-                          >
-                            <option value="">Select zone</option>
-                            {zoneOptions.map((zone) => (
-                              <option key={zone.key} value={zone.key}>
-                                {zone.name}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-
-                        <Field label="Tier Name *" error={errors[`tier_${tier.key}_name`]}>
-                          <input
-                            className={smallInputCls(errors[`tier_${tier.key}_name`])}
-                            placeholder="e.g. VIP"
-                            value={tier.tierName}
-                            onChange={(event) => updateTier(tier.key, 'tierName', event.target.value)}
-                          />
-                        </Field>
-
-                        <Field label="Price *" error={errors[`tier_${tier.key}_price`]}>
-                          <input
-                            type="number"
-                            min="1"
-                            className={smallInputCls(errors[`tier_${tier.key}_price`])}
-                            placeholder="250"
-                            value={tier.price}
-                            onChange={(event) => updateTier(tier.key, 'price', event.target.value)}
-                          />
-                        </Field>
-                      </div>
-                    </div>
+                {Object.entries(errors)
+                  .filter(([key]) => key.startsWith('layout_zone_'))
+                  .map(([key, message]) => (
+                    <p key={key} className="mb-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-600">
+                      {message}
+                    </p>
                   ))}
-                </div>
+
+                <SeatMapRenderer
+                  isEditable
+                  eventId={initial?.id || 'draft-event'}
+                  initialLayout={form.seatLayout || {
+                    zones: [],
+                  }}
+                  onChange={(payload) => setField('seatLayout', payload)}
+                  onSave={(payload) => {
+                    setField('seatLayout', payload);
+                  }}
+                />
+
+                {form.seatLayout ? (
+                  <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-700">
+                    {getLayoutZones(form.seatLayout).length} zone(s) are attached to this event payload.
+                  </p>
+                ) : (
+                  <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-700">
+                    Add at least one zone to the canvas before creating the event.
+                  </p>
+                )}
               </div>
             </>
           )}
@@ -695,7 +460,7 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
             <button
               type="button"
               onClick={submit}
-              disabled={saving}
+              disabled={saving || !isSeatLayoutReady}
               className="rounded-xl bg-violet-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-60"
             >
               {saving ? 'Saving...' : initial ? 'Update Event' : 'Create Event'}

@@ -1,5 +1,7 @@
 package com.ticketrush.eventservice.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ticketrush.eventservice.dto.DashboardSummaryDTO;
 import com.ticketrush.eventservice.dto.EventDTO;
 import com.ticketrush.eventservice.dto.EventPriceTierDTO;
@@ -55,6 +57,7 @@ public class EventService {
     private final EventPriceTierRepository eventPriceTierRepository;
     private final PriceTierRepository priceTierRepository;
     private final SeatService seatService;
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public EventDTO createEvent(EventDTO eventDTO) {
@@ -184,6 +187,7 @@ public class EventService {
         String resolvedImageUrl = firstNonBlank(dto.getImageUrl(), dto.getBannerUrl());
         event.setImageUrl(resolvedImageUrl);
         event.setBannerUrl(resolvedImageUrl);
+        event.setSeatLayoutJson(writeSeatLayout(dto.getSeatLayout()));
 
         Venue resolvedVenue = resolveVenue(dto.getVenue());
         event.setVenue(resolvedVenue);
@@ -594,7 +598,30 @@ public class EventService {
         dto.setZones(mapZonesToDTO(seats, eventPriceTiers));
         dto.setPriceTiers(priceTierDTOs);
         dto.setSeats(seatDTOs);
+        dto.setSeatLayout(readSeatLayout(event.getSeatLayoutJson()));
         return dto;
+    }
+
+    private String writeSeatLayout(JsonNode seatLayout) {
+        if (seatLayout == null || seatLayout.isNull()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(seatLayout);
+        } catch (Exception exception) {
+            throw new RuntimeException("Invalid seat layout JSON");
+        }
+    }
+
+    private JsonNode readSeatLayout(String seatLayoutJson) {
+        if (seatLayoutJson == null || seatLayoutJson.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readTree(seatLayoutJson);
+        } catch (Exception exception) {
+            return null;
+        }
     }
 
     private List<EventZoneConfigDTO> mapZonesToDTO(List<Seat> seats, List<EventPriceTier> priceTiers) {
@@ -669,6 +696,9 @@ public class EventService {
         dto.setStatus(seat.getStatus());
         dto.setLockHolder(seat.getLockHolder());
         dto.setLockExpiresAt(seat.getLockExpiresAt());
+        dto.setPosX(seat.getCoordinateX());
+        dto.setPosY(seat.getCoordinateY());
+        dto.setRotation(BigDecimal.ZERO);
 
         if (seat.getVenueZone() != null) {
             VenueZoneDTO zoneDTO = new VenueZoneDTO();
@@ -733,6 +763,9 @@ public class EventService {
                 seat.getLockExpiresAt(),
                 seat.getCoordinateX(),
                 seat.getCoordinateY(),
+                seat.getCoordinateX(),
+                seat.getCoordinateY(),
+                BigDecimal.ZERO,
                 seat.getPriceTier() != null
                         ? new PriceTierDTO(
                         seat.getPriceTier().getId(),

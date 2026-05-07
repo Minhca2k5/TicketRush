@@ -4,12 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, RefreshCcw, ShoppingBag, X } from "lucide-react";
 import { mapSeatLayoutToType, mapSeatsToType } from "@/lib/seat-types";
 import { EventHeader } from "./EventHeader";
-import { Stage } from "./Stage";
 import { SeatMap } from "./SeatMap";
 import { Legend } from "./Legend";
 import { BookingCart } from "./BookingCart";
 import { getSeatLayout, getSeatMap } from "../services/eventService";
 import { lockSeat, releaseSeat, checkout } from "../services/bookingService";
+import SeatMapRenderer from "./seat-map/SeatMapRenderer";
 
 const HOLD_MINUTES = 10;
 const POLL_INTERVAL_MS = 5000;
@@ -27,12 +27,43 @@ function getOrCreateHolderId() {
   return generated;
 }
 
-export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
+function normalizeCanvasSeatStatus(status) {
+  const normalized = String(status || "").trim().toUpperCase();
+  if (["SOLD", "BOOKED", "UNAVAILABLE"].includes(normalized)) return "SOLD";
+  if (["LOCKED", "WAITING", "HELD", "RESERVED", "IN_QUEUE"].includes(normalized)) return "LOCKED";
+  return "AVAILABLE";
+}
+
+function getCanvasSeatNumber(seatNumber) {
+  const value = String(seatNumber || "");
+  const match = value.match(/(\d+)$/);
+  return match ? Number(match[1]) : 1;
+}
+
+function toBookingSeat(layoutSeat, zone, tier) {
+  const seatNumber = String(layoutSeat.seatNumber || "");
+  const row = layoutSeat.rowName || seatNumber.replace(/\d+$/, "") || "A";
+  return {
+    id: layoutSeat.id,
+    row,
+    number: getCanvasSeatNumber(seatNumber),
+    seatLabel: seatNumber || `${row}${getCanvasSeatNumber(seatNumber)}`,
+    zone: zone?.name || zone?.zoneName || "General",
+    price: Number(tier?.price ?? zone?.price ?? layoutSeat.price ?? 0),
+    status: normalizeCanvasSeatStatus(layoutSeat.status),
+    lockHolder: layoutSeat.lockHolder ?? null,
+    lockExpiresAt: layoutSeat.lockExpiresAt ?? null,
+  };
+}
+
+export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, initialLayout, initialCoordinateLayout }) {
   const [selectedSeats, setSelectedSeats] = useState([]);
   const [timerStart, setTimerStart] = useState(null);
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [showBookingConfirm, setShowBookingConfirm] = useState(false);
   const [seatLayout, setSeatLayout] = useState(initialLayout || null);
+  const [coordinateLayout, setCoordinateLayout] = useState(initialCoordinateLayout || null);
+  const [rawLiveSeats, setRawLiveSeats] = useState(initialRawSeats || []);
   const [liveSeats, setLiveSeats] = useState(() => {
     return initialSeats || [];
   });
@@ -70,8 +101,16 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
   }, [initialSeats]);
 
   useEffect(() => {
+    setRawLiveSeats(initialRawSeats || []);
+  }, [initialRawSeats]);
+
+  useEffect(() => {
     setSeatLayout(initialLayout || null);
   }, [initialLayout]);
+
+  useEffect(() => {
+    setCoordinateLayout(initialCoordinateLayout || null);
+  }, [initialCoordinateLayout]);
 
   useEffect(() => {
     if (!toast) {
@@ -93,6 +132,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
       const mappedSeats = mapSeatsToType(Array.isArray(seatMapPayload) ? seatMapPayload : []);
 
       setSeatLayout(mapped.layout);
+      setRawLiveSeats(Array.isArray(seatMapPayload) ? seatMapPayload : []);
       setLiveSeats(mappedSeats.length ? mappedSeats : mapped.seats);
       setLastSyncAt(Date.now());
       setSyncMessage("");
@@ -264,6 +304,10 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
     await handleSeatSelect(seat);
   }, [handleSeatSelect]);
 
+  const handleCanvasSeatSelect = useCallback((layoutSeat, zone, tier) => {
+    handleSeatSelect(toBookingSeat(layoutSeat, zone, tier));
+  }, [handleSeatSelect]);
+
   const handleCheckout = useCallback(async () => {
     if (!eventId || !holderIdRef.current || !selectedSeats.length) return;
     setIsCheckoutLoading(true);
@@ -296,6 +340,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
   ), [liveSeats, seatActionInFlight]);
   const syncLabel = useMemo(() => new Date(lastSyncAt).toLocaleTimeString(), [lastSyncAt]);
   const hasSeatInventory = seats.length > 0;
+  const hasCoordinateLayout = Array.isArray(coordinateLayout?.zones) && coordinateLayout.zones.length > 0;
 
   return (
     <div className="bg-[linear-gradient(180deg,#f8faff_0%,#eef2ff_100%)]">
@@ -330,13 +375,31 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
 
         <div className="mt-8 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-6">
-            <Stage />
-            <SeatMap
-              seats={seats}
-              seatLayout={seatLayout}
-              selectedSeats={selectedSeats}
-              onSeatSelect={handleSeatSelect}
-            />
+            {hasCoordinateLayout ? (
+              <div className="rounded-[28px] border border-white/70 bg-white/85 p-5 shadow-sm md:p-6">
+                <div className="mb-5">
+                  <h3 className="text-lg font-bold text-slate-900">Interactive Seat Map</h3>
+                  <p className="text-sm text-slate-500">
+                    The venue layout is rendered from the admin design canvas, including stage, field, exits, zones, and rotation.
+                  </p>
+                </div>
+                <SeatMapRenderer
+                  isEditable={false}
+                  eventId={eventId}
+                  layout={coordinateLayout}
+                  liveSeats={rawLiveSeats}
+                  selectedSeats={selectedSeats.map((seat) => ({ seat }))}
+                  onToggleSeat={handleCanvasSeatSelect}
+                />
+              </div>
+            ) : (
+              <SeatMap
+                seats={seats}
+                seatLayout={seatLayout}
+                selectedSeats={selectedSeats}
+                onSeatSelect={handleSeatSelect}
+              />
+            )}
             <Legend />
             {!hasSeatInventory ? (
               <div className="rounded-[24px] border border-dashed border-slate-200 bg-white/80 px-5 py-6 text-sm text-slate-500">

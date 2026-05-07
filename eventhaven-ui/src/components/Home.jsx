@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { CalendarDays, MapPin, Sparkles, Ticket } from 'lucide-react';
+import { CalendarDays, ImageOff, MapPin, Ticket } from 'lucide-react';
 import api from '../services/api';
+import HeroSlider from './HeroSlider';
 
 const inferCategory = (event) => {
   const text = `${event.name || ''} ${event.description || ''}`.toLowerCase();
@@ -26,10 +27,110 @@ const inferPrice = (event, index) => {
 };
 
 const resolveEventImage = (event) =>
-  event?.bannerUrl || event?.imageUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1600&q=80';
+  event?.bannerUrl || event?.imageUrl || event?.posterUrl || event?.image || '';
 
 const resolveEventLocation = (event) =>
   event?.location || event?.venue?.name || event?.venue?.address || 'Venue TBA';
+
+function EventImagePlaceholder({ category }) {
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_20%_20%,_rgba(255,255,255,0.35),_transparent_26%),linear-gradient(135deg,_#4f46e5,_#7c3aed_52%,_#111827)] text-white">
+      <div className="flex flex-col items-center gap-3">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 shadow-lg ring-1 ring-white/25 backdrop-blur">
+          <Ticket size={28} />
+        </div>
+        <div className="text-center">
+          <p className="text-sm font-black tracking-tight">TicketRush</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/70">{category}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EventCard({ event }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const imageUrl = resolveEventImage(event);
+  const locationText = resolveEventLocation(event);
+  const formattedPrice = Number(event.price || 0).toLocaleString();
+  const startTime = event.startTime ? new Date(event.startTime).toLocaleString() : 'Date TBA';
+
+  return (
+    <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_12px_34px_rgba(15,23,42,0.08)] transition duration-300 hover:-translate-y-1 hover:border-violet-200 hover:shadow-xl">
+      <div className="relative aspect-video overflow-hidden bg-slate-100">
+        {imageUrl && !imageFailed ? (
+          <img
+            src={imageUrl}
+            alt={event.name || 'TicketRush event banner'}
+            onError={() => setImageFailed(true)}
+            className="h-full w-full object-cover transition duration-500 ease-out group-hover:scale-105"
+          />
+        ) : (
+          <EventImagePlaceholder category={event.category || 'event'} />
+        )}
+
+        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/55 to-transparent" />
+        <span className="absolute left-4 top-4 inline-flex max-w-[calc(100%-2rem)] items-center rounded-full bg-violet-600/90 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-white shadow-lg shadow-violet-900/20 ring-1 ring-white/25 backdrop-blur">
+          {event.category || 'event'}
+        </span>
+      </div>
+
+      <div className="flex flex-1 flex-col p-5">
+        <div className="min-h-[88px]">
+          <h3 className="line-clamp-2 text-lg font-bold leading-snug text-slate-950">
+            {event.name || 'Untitled Event'}
+          </h3>
+          <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">
+            {event.description || 'More event details will be available soon.'}
+          </p>
+        </div>
+
+        <div className="mt-4 space-y-2 text-sm text-slate-500">
+          <p className="flex items-start gap-2">
+            <CalendarDays size={16} className="mt-0.5 shrink-0 text-violet-500" />
+            <span className="line-clamp-1">{startTime}</span>
+          </p>
+          <p className="flex items-start gap-2">
+            <MapPin size={16} className="mt-0.5 shrink-0 text-violet-500" />
+            <span className="line-clamp-1">{locationText}</span>
+          </p>
+        </div>
+
+        <div className="mt-auto pt-5">
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Starting from</p>
+              <p className="mt-1 text-2xl font-black tracking-tight text-slate-950">${formattedPrice}</p>
+            </div>
+            {imageFailed ? <ImageOff size={18} className="mb-1 text-slate-300" /> : null}
+          </div>
+
+          <Link
+            to={`/events/${event.id}`}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition duration-200 hover:from-violet-500 hover:to-indigo-500 hover:shadow-violet-500/35 focus:outline-none focus:ring-4 focus:ring-violet-200"
+          >
+            <Ticket size={16} />
+            Buy Ticket
+          </Link>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function EventList({ events }) {
+  if (!events.length) {
+    return (
+      <div className="col-span-full rounded-2xl border border-dashed border-slate-300 bg-white/80 px-6 py-12 text-center text-slate-500">
+        No events matched your search. Try a different keyword or category.
+      </div>
+    );
+  }
+
+  return events.map((event) => (
+    <EventCard key={event.id} event={event} />
+  ));
+}
 
 export default function Home() {
   const [events, setEvents] = useState([]);
@@ -115,73 +216,10 @@ export default function Home() {
     })
   ), [normalizedEvents, search, category]);
 
-  const trendingEvent = filteredEvents[0] || normalizedEvents[0] || null;
-
   return (
     <div className="bg-[radial-gradient(circle_at_top_left,_rgba(139,92,246,0.18),_transparent_28%),linear-gradient(180deg,_#f8faff_0%,_#eef2ff_100%)]">
       <main className="mx-auto max-w-7xl px-4 py-8 lg:px-8 lg:py-12">
-        <section className="overflow-hidden rounded-[32px] border border-white/70 bg-slate-950 text-white shadow-[0_30px_80px_rgba(76,29,149,0.28)]">
-          <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-            <div className="p-8 md:p-12">
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-violet-200">
-                <Sparkles size={16} />
-                Trending Event
-              </div>
-              <h1 className="mt-6 max-w-2xl text-4xl font-black tracking-tight md:text-6xl">
-                {trendingEvent?.name || 'Live events will appear here once the Event Service has data.'}
-              </h1>
-              <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-                {trendingEvent?.description || 'Connect the frontend to seeded or newly created events, then customers will be able to browse and book real listings.'}
-              </p>
-              <div className="mt-8 flex flex-wrap gap-5 text-sm text-slate-300">
-                {trendingEvent ? (
-                  <>
-                    <span className="inline-flex items-center gap-2">
-                      <CalendarDays size={16} className="text-violet-300" />
-                      {new Date(trendingEvent.startTime).toLocaleString()}
-                    </span>
-                    <span className="inline-flex items-center gap-2">
-                      <MapPin size={16} className="text-violet-300" />
-                      {resolveEventLocation(trendingEvent)}
-                    </span>
-                  </>
-                ) : (
-                  <span className="inline-flex items-center gap-2 text-violet-100/90">
-                    <MapPin size={16} className="text-violet-300" />
-                    No featured event available yet
-                  </span>
-                )}
-              </div>
-              <div className="mt-10 flex flex-wrap items-center gap-4">
-                {trendingEvent ? (
-                  <>
-                    <Link
-                      to={`/events/${trendingEvent.id}`}
-                      className="rounded-full bg-violet-500 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-violet-500/30 transition hover:bg-violet-400"
-                    >
-                      Book Now
-                    </Link>
-                    <span className="rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-200">
-                      From ${Number(trendingEvent.price).toLocaleString()}
-                    </span>
-                  </>
-                ) : (
-                  <span className="rounded-full border border-amber-300/30 bg-white/5 px-5 py-3 text-sm font-semibold text-amber-100">
-                    Add or seed events to enable booking
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="relative min-h-[320px]">
-              <img
-                src={resolveEventImage(trendingEvent)}
-                alt={trendingEvent?.name || 'TicketRush featured event placeholder'}
-                className="h-full w-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-tr from-slate-950 via-slate-950/20 to-transparent" />
-            </div>
-          </div>
-        </section>
+        <HeroSlider events={normalizedEvents} />
 
         <section className="mt-12">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -215,53 +253,11 @@ export default function Home() {
                 </div>
               ) : null}
 
-              <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-                {filteredEvents.map((event) => (
-                  <article
-                    key={event.id}
-                    className="group overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_18px_50px_rgba(148,163,184,0.18)] transition duration-300 hover:-translate-y-1.5 hover:shadow-[0_30px_70px_rgba(124,58,237,0.18)]"
-                  >
-                    <div className="relative h-56 overflow-hidden">
-                      <img src={resolveEventImage(event)} alt={event.name} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
-                      <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-slate-950/80 to-transparent" />
-                      <span className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1 text-xs font-bold uppercase tracking-[0.25em] text-violet-700">
-                        {event.category}
-                      </span>
-                    </div>
-                    <div className="space-y-4 p-5">
-                      <div>
-                        <h3 className="text-xl font-black tracking-tight text-slate-900">{event.name}</h3>
-                        <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">{event.description}</p>
-                      </div>
-                      <div className="space-y-2 text-sm text-slate-600">
-                        <p className="inline-flex items-center gap-2">
-                          <CalendarDays size={16} className="text-violet-500" />
-                          {new Date(event.startTime).toLocaleString()}
-                        </p>
-                        <p className="inline-flex items-center gap-2">
-                          <MapPin size={16} className="text-violet-500" />
-                          {resolveEventLocation(event)}
-                        </p>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Starting from</p>
-                          <p className="mt-1 text-2xl font-black text-slate-900">${Number(event.price).toLocaleString()}</p>
-                        </div>
-                        <Link
-                          to={`/events/${event.id}`}
-                          className="inline-flex items-center gap-2 rounded-full bg-violet-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-violet-500"
-                        >
-                          <Ticket size={16} />
-                          Buy Ticket
-                        </Link>
-                      </div>
-                    </div>
-                  </article>
-                ))}
-
-                {!filteredEvents.length && (
-                  <div className="col-span-full rounded-[28px] border border-dashed border-slate-300 bg-white/80 px-6 py-12 text-center text-slate-500">
+              <div className="mt-8 grid items-stretch gap-6 md:grid-cols-2 xl:grid-cols-4">
+                {filteredEvents.length ? (
+                  <EventList events={filteredEvents} />
+                ) : (
+                  <div className="col-span-full rounded-2xl border border-dashed border-slate-300 bg-white/80 px-6 py-12 text-center text-slate-500">
                     {normalizedEvents.length
                       ? 'No events matched your search. Try a different keyword or category.'
                       : 'No live events are available yet. Seed or create events in the Event Service to populate this page.'}

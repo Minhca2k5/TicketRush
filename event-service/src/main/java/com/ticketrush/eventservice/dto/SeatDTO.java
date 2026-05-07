@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -18,4 +19,7 @@ public class SeatDTO {
     private LocalDateTime lockExpiresAt;
     private VenueZoneDTO venueZone;
     private PriceTierDTO priceTier;
+    private BigDecimal posX;
+    private BigDecimal posY;
+    private BigDecimal rotation;
 }
