@@ -554,6 +554,9 @@ public class EventService {
     }
 
     private EventSummaryDTO mapToSummaryDTO(Event event) {
+        List<EventPriceTier> eventPriceTiers = eventPriceTierRepository.findByEventId(event.getId());
+        List<Seat> seats = seatRepository.findByEventId(event.getId());
+
         EventSummaryDTO dto = new EventSummaryDTO();
         dto.setId(event.getId());
         dto.setName(event.getName());
@@ -567,7 +570,80 @@ public class EventService {
         dto.setBannerUrl(event.getBannerUrl());
         dto.setStatus(event.getStatus());
         dto.setVenue(mapVenueToDTO(event.getVenue()));
+        dto.setMinPrice(resolveSummaryMinPrice(event, eventPriceTiers, seats));
+        dto.setSoldOut(isEventSoldOut(seats));
         return dto;
+    }
+
+    private BigDecimal resolveSummaryMinPrice(Event event, List<EventPriceTier> eventPriceTiers, List<Seat> seats) {
+        List<BigDecimal> prices = new ArrayList<>();
+
+        eventPriceTiers.stream()
+                .map(EventPriceTier::getPrice)
+                .filter(Objects::nonNull)
+                .forEach(prices::add);
+
+        seats.stream()
+                .map(Seat::getPriceTier)
+                .filter(Objects::nonNull)
+                .map(PriceTier::getPrice)
+                .filter(Objects::nonNull)
+                .map(BigDecimal::valueOf)
+                .forEach(prices::add);
+
+        collectSeatLayoutPrices(readSeatLayout(event.getSeatLayoutJson()), prices);
+
+        return prices.stream()
+                .min(BigDecimal::compareTo)
+                .orElse(null);
+    }
+
+    private void collectSeatLayoutPrices(JsonNode node, List<BigDecimal> prices) {
+        if (node == null || node.isNull()) {
+            return;
+        }
+
+        addPriceIfPresent(node, "price", prices);
+        addPriceIfPresent(node, "minPrice", prices);
+        addPriceIfPresent(node, "min_price", prices);
+
+        collectSeatLayoutPrices(node.get("priceTier"), prices);
+        collectSeatLayoutPrices(node.get("tier"), prices);
+
+        collectSeatLayoutPricesFromArray(node.get("zones"), prices);
+        collectSeatLayoutPricesFromArray(node.get("venue_zones"), prices);
+        collectSeatLayoutPricesFromArray(node.get("rows"), prices);
+        collectSeatLayoutPricesFromArray(node.get("seats"), prices);
+    }
+
+    private void collectSeatLayoutPricesFromArray(JsonNode arrayNode, List<BigDecimal> prices) {
+        if (arrayNode == null || !arrayNode.isArray()) {
+            return;
+        }
+
+        arrayNode.forEach(child -> collectSeatLayoutPrices(child, prices));
+    }
+
+    private void addPriceIfPresent(JsonNode node, String fieldName, List<BigDecimal> prices) {
+        JsonNode priceNode = node.get(fieldName);
+        if (priceNode == null || priceNode.isNull() || !priceNode.isNumber()) {
+            return;
+        }
+
+        prices.add(priceNode.decimalValue());
+    }
+
+    private Boolean isEventSoldOut(List<Seat> seats) {
+        if (seats == null || seats.isEmpty()) {
+            return false;
+        }
+
+        return seats.stream()
+                .map(Seat::getStatus)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .map(String::toUpperCase)
+                .allMatch(status -> List.of("SOLD", "BOOKED", "UNAVAILABLE").contains(status));
     }
 
     private EventDTO mapToDTO(Event event) {

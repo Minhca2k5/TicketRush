@@ -3,6 +3,7 @@ package com.ticketrush.eventservice.dto;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -21,4 +22,6 @@ public class EventSummaryDTO {
     private String bannerUrl;
     private String status;
     private VenueDTO venue;
+    private BigDecimal minPrice;
+    private Boolean soldOut;
 }

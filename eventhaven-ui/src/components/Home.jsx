@@ -3,6 +3,7 @@ import { ArrowRight, CalendarDays, ImageOff, MapPin, Ticket } from 'lucide-react
 import { Link, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import HeroSlider from './HeroSlider';
+import { getEventPriceInfo } from '../lib/event-pricing';
 
 const inferCategory = (event) => {
   const text = `${event.name || ''} ${event.description || ''}`.toLowerCase();
@@ -19,11 +20,6 @@ const normalizeCategory = (value) => {
   if (/sport|match|final|arena|championship/.test(normalized)) return 'sports';
   if (/theater|theatre|opera|gala|drama|comedy/.test(normalized)) return 'theater';
   return normalized;
-};
-
-const inferPrice = (event, index) => {
-  if (event.priceTier?.price) return event.priceTier.price;
-  return 79 + index * 12;
 };
 
 const resolveEventImage = (event) =>
@@ -52,7 +48,7 @@ function EventCard({ event }) {
   const [imageFailed, setImageFailed] = useState(false);
   const imageUrl = resolveEventImage(event);
   const locationText = resolveEventLocation(event);
-  const formattedPrice = Number(event.price || 0).toLocaleString();
+  const priceInfo = getEventPriceInfo(event);
   const startTime = event.startTime ? new Date(event.startTime).toLocaleString() : 'Date TBA';
 
   return (
@@ -99,8 +95,10 @@ function EventCard({ event }) {
         <div className="mt-auto pt-5">
           <div className="mb-4 flex items-end justify-between gap-4">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Starting from</p>
-              <p className="mt-1 text-2xl font-black tracking-tight text-slate-950">${formattedPrice}</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">{priceInfo.helper}</p>
+              <p className={`mt-1 text-2xl font-black tracking-tight ${priceInfo.state === 'sold_out' ? 'text-rose-600' : 'text-slate-950'}`}>
+                {priceInfo.label}
+              </p>
             </div>
             {imageFailed ? <ImageOff size={18} className="mb-1 text-slate-300" /> : null}
           </div>
@@ -200,10 +198,9 @@ export default function Home() {
   }, [loadError, loadEvents]);
 
   const normalizedEvents = useMemo(() => (
-    events.map((event, index) => ({
+    events.map((event) => ({
       ...event,
       category: normalizeCategory(event.category || inferCategory(event)),
-      price: inferPrice(event, index),
     }))
   ), [events]);
 
