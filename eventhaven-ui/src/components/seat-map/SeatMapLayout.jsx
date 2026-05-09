@@ -3,26 +3,72 @@ import api from '../../services/api';
 import SeatGrid from './SeatGrid';
 import SeatLegend from './SeatLegend';
 import BookingSummary from './BookingSummary';
+import SeatMapRenderer from './SeatMapRenderer';
 
 export default function SeatMapLayout({ eventId }) {
   const [seatMap, setSeatMap] = useState(null);
+  const [eventDetail, setEventDetail] = useState(null);
+  const [liveSeats, setLiveSeats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedSeats, setSelectedSeats] = useState([]); // Array of { seat, zone, tier }
 
   useEffect(() => {
-    api.get(`/events/${eventId}/seat-map`)
-      .then(res => setSeatMap(res.data?.data || res.data))
-      .catch(err => console.error("Failed to load seat map", err))
-      .finally(() => setLoading(false));
+    let active = true;
+
+    const loadInitial = async () => {
+      try {
+        const [seatMapResponse, eventResponse] = await Promise.all([
+          api.get(`/events/${eventId}/seat-layout`),
+          api.get(`/events/${eventId}`),
+        ]);
+        if (!active) return;
+        const layoutPayload = seatMapResponse.data?.data || seatMapResponse.data || null;
+        setSeatMap(layoutPayload);
+        setLiveSeats((layoutPayload?.zones || []).flatMap((zone) => (
+          (zone.rows || []).flatMap((row) => (
+            (row.seats || []).map((seat) => ({ ...seat, venueZone: { id: zone.zoneId, name: zone.zoneName } }))
+          ))
+        )));
+        setEventDetail(eventResponse.data?.data || eventResponse.data);
+      } catch (err) {
+        console.error("Failed to load seat map", err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    loadInitial();
+    return () => { active = false; };
+  }, [eventId]);
+
+  useEffect(() => {
+    const refreshSeats = async () => {
+      try {
+        const response = await api.get(`/events/${eventId}/seat-map`);
+        const payload = response.data?.data || response.data || [];
+        if (!Array.isArray(payload)) return;
+        setLiveSeats(payload);
+        const unavailableIds = new Set(payload
+          .filter((seat) => ['SOLD', 'BOOKED', 'LOCKED', 'HELD', 'RESERVED'].includes(String(seat.status || '').toUpperCase()))
+          .map((seat) => String(seat.id)));
+        setSelectedSeats((previous) => previous.filter((item) => !unavailableIds.has(String(item.seat.id))));
+      } catch (error) {
+        console.error('Failed to refresh seat status', error);
+      }
+    };
+
+    const interval = window.setInterval(refreshSeats, 5000);
+    return () => window.clearInterval(interval);
   }, [eventId]);
 
   const toggleSeat = (seat, zone, tier) => {
-    if (seat.status === 'SOLD' || seat.status === 'LOCKED') return;
+    const status = String(seat.status || '').toUpperCase();
+    if (['SOLD', 'BOOKED', 'LOCKED', 'HELD', 'RESERVED'].includes(status)) return;
 
     setSelectedSeats(prev => {
-      const isSelected = prev.some(s => s.seat.id === seat.id);
+      const isSelected = prev.some(s => String(s.seat.id) === String(seat.id));
       if (isSelected) {
-        return prev.filter(s => s.seat.id !== seat.id);
+        return prev.filter(s => String(s.seat.id) !== String(seat.id));
       } else {
         return [...prev, { seat, zone, tier }];
       }
@@ -42,7 +88,10 @@ export default function SeatMapLayout({ eventId }) {
     );
   }
 
-  if (!seatMap || !seatMap.zones || seatMap.zones.length === 0) {
+  const coordinateLayout = eventDetail?.seatLayout;
+  const hasCoordinateLayout = coordinateLayout?.zones?.length > 0;
+
+  if (!hasCoordinateLayout && (!seatMap || !seatMap.zones || seatMap.zones.length === 0)) {
     return (
       <div className="flex-1 flex items-center justify-center p-10 text-center">
         <div className="max-w-sm">
@@ -66,25 +115,28 @@ export default function SeatMapLayout({ eventId }) {
       {/* Left: Seat Map Area */}
       <div className="flex-1 flex flex-col relative overflow-hidden bg-white/50 border-r border-gray-200">
         
-        {/* Stage */}
-        <div className="pt-8 pb-4 px-4 flex justify-center sticky top-0 bg-white/80 backdrop-blur-sm z-10">
-          <div className="w-full max-w-2xl">
-            <div className="h-16 bg-gradient-to-b from-gray-800 to-gray-600 rounded-t-full shadow-[0_10px_30px_-5px_rgba(0,0,0,0.3)] flex items-center justify-center border-b-4 border-violet-500">
-              <span className="text-gray-300 font-bold tracking-[0.3em] uppercase text-sm">Stage</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Seat Matrix */}
-        <div className="flex-1 overflow-auto p-4 sm:p-8 flex flex-col items-center gap-10">
-          {seatMap.zones.map(zoneData => (
-            <SeatGrid 
-              key={zoneData.zone.id} 
-              zoneData={zoneData} 
+        <div className="flex-1 overflow-auto p-4 sm:p-6">
+          {hasCoordinateLayout ? (
+            <SeatMapRenderer
+              isEditable={false}
+              eventId={eventId}
+              layout={coordinateLayout}
+              liveSeats={liveSeats}
               selectedSeats={selectedSeats}
               onToggleSeat={toggleSeat}
             />
-          ))}
+          ) : (
+            <div className="flex flex-col items-center gap-10">
+              {seatMap.zones.map(zoneData => (
+                <SeatGrid 
+                  key={zoneData.zone.id} 
+                  zoneData={zoneData} 
+                  selectedSeats={selectedSeats}
+                  onToggleSeat={toggleSeat}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Legend */}

@@ -19,5 +19,8 @@ public class SeatLayoutItemDTO {
     private LocalDateTime lockExpiresAt;
     private BigDecimal coordinateX;
     private BigDecimal coordinateY;
+    private BigDecimal posX;
+    private BigDecimal posY;
+    private BigDecimal rotation;
     private PriceTierDTO priceTier;
 }

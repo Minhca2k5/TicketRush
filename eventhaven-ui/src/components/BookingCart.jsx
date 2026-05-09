@@ -7,24 +7,63 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 0,
 });
 
-export function BookingCart({ selectedSeats, onRemoveSeat, onBookNow, timerStart, total }) {
+function getSeatLabel(seat) {
+  return seat.seatLabel || seat.label || `${seat.row || ''}${seat.number || ''}` || 'Seat';
+}
+
+function getZoneLabel(seat) {
+  return seat.zoneName || seat.zoneTitle || seat.zone || seat.venueZone?.name || 'General';
+}
+
+export function BookingCart({ selectedSeats, onRemoveSeat, onBookNow, onTimerExpired, timerStart, expiresAt, total }) {
   const [remaining, setRemaining] = useState(600);
 
   useEffect(() => {
-    if (!timerStart || !selectedSeats.length) {
+    if (!selectedSeats.length) {
       setRemaining(600);
       return undefined;
     }
 
     const tick = () => {
-      const elapsed = Math.floor((Date.now() - timerStart) / 1000);
-      setRemaining(Math.max(0, 600 - elapsed));
+      if (expiresAt) {
+        const expiresAtMs = new Date(expiresAt).getTime();
+        if (!Number.isNaN(expiresAtMs)) {
+          setRemaining(Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 1000)));
+          return;
+        }
+      }
+
+      if (selectedSeats.length) {
+        const seatExpiresAt = selectedSeats
+          .map((seat) => new Date(seat.lockExpiresAt || 0).getTime())
+          .filter((value) => !Number.isNaN(value) && value > Date.now())
+          .sort((first, second) => first - second)[0];
+
+        if (seatExpiresAt) {
+          setRemaining(Math.max(0, Math.ceil((seatExpiresAt - Date.now()) / 1000)));
+          return;
+        }
+      }
+
+      if (timerStart) {
+        const elapsed = Math.floor((Date.now() - timerStart) / 1000);
+        setRemaining(Math.max(0, 600 - elapsed));
+        return;
+      }
+
+      setRemaining(600);
     };
 
     tick();
     const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
-  }, [timerStart, selectedSeats.length]);
+  }, [expiresAt, timerStart, selectedSeats]);
+
+  useEffect(() => {
+    if ((expiresAt || timerStart) && selectedSeats.length && remaining === 0) {
+      onTimerExpired?.();
+    }
+  }, [expiresAt, onTimerExpired, remaining, selectedSeats.length, timerStart]);
 
   const formatted = useMemo(() => {
     const minutes = String(Math.floor(remaining / 60)).padStart(2, '0');
@@ -56,15 +95,19 @@ export function BookingCart({ selectedSeats, onRemoveSeat, onBookNow, timerStart
             Pick one or more seats to unlock checkout.
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
             {selectedSeats.map((seat) => (
-              <div key={seat.id} className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm">
-                <div>
-                  <p className="text-sm font-bold text-slate-900">{seat.seatLabel || `${seat.row}${seat.number}`}</p>
-                  <p className="text-xs text-slate-500">{seat.zone}</p>
+              <div key={seat.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm">
+                <div className="min-w-0">
+                  <p className="truncate text-base font-black text-slate-900">{getSeatLabel(seat)}</p>
+                  <p className="mt-1 truncate text-xs font-bold uppercase tracking-wide text-slate-500">
+                    {getZoneLabel(seat)}
+                  </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <p className="text-sm font-bold text-slate-900">{currencyFormatter.format(seat.price || 0)}</p>
+                <div className="flex shrink-0 items-center gap-3">
+                  <p className="rounded-full bg-violet-50 px-3 py-1 text-sm font-black text-violet-700 ring-1 ring-violet-100">
+                    {currencyFormatter.format(seat.price || 0)}
+                  </p>
                   <button
                     type="button"
                     onClick={() => onRemoveSeat(seat)}

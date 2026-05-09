@@ -1,5 +1,6 @@
 package com.ticketrush.eventservice.dto;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
@@ -23,6 +24,7 @@ public class EventDTO {
     private List<EventZoneConfigDTO> zones;
     private List<EventPriceTierDTO> priceTiers;
     private List<SeatDTO> seats;
+    private JsonNode seatLayout;
 
     public EventDTO(
             Long id,

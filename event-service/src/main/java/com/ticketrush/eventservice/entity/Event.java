@@ -33,6 +33,9 @@ public class Event {
     private String bannerUrl;
     private String status;
 
+    @Column(columnDefinition = "TEXT")
+    private String seatLayoutJson;
+
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "venue_id")
     private Venue venue;

@@ -10,6 +10,8 @@ export default function EventDetail() {
   const [event, setEvent] = useState(null);
   const [seatLayout, setSeatLayout] = useState(null);
   const [seatInventory, setSeatInventory] = useState([]);
+  const [rawSeatInventory, setRawSeatInventory] = useState([]);
+  const [coordinateLayout, setCoordinateLayout] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAdmitted, setIsAdmitted] = useState(() => (
     window.sessionStorage.getItem(`ticketrush-admitted-${id}`) === 'true'
@@ -42,12 +44,16 @@ export default function EventDetail() {
           setEvent(eventPayload);
           setSeatLayout(mappedLayout.layout);
           setSeatInventory(mappedSeatMap.length ? mappedSeatMap : mappedLayout.seats);
+          setRawSeatInventory(Array.isArray(seatMapPayload) ? seatMapPayload : []);
+          setCoordinateLayout(eventPayload?.seatLayout || null);
         }
       } catch {
         if (!ignore) {
           setEvent(null);
           setSeatLayout(null);
           setSeatInventory([]);
+          setRawSeatInventory([]);
+          setCoordinateLayout(null);
         }
       } finally {
         if (!ignore && isInitialLoad) {
@@ -86,6 +92,8 @@ export default function EventDetail() {
       }}
       initialLayout={seatLayout}
       initialSeats={seatInventory}
+      initialRawSeats={rawSeatInventory}
+      initialCoordinateLayout={coordinateLayout}
     />
   );
 }

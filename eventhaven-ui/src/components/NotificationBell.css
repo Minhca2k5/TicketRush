@@ -64,9 +64,11 @@
 .notification-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 1rem;
   padding: 1rem;
   border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
 }
 
 .notification-header h3 {
@@ -74,6 +76,12 @@
   font-size: 1rem;
   font-weight: 600;
   color: #1e293b;
+}
+
+.notification-header p {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  color: #64748b;
 }
 
 .notification-actions {
@@ -124,11 +132,15 @@
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  padding: 0.75rem;
+  padding: 0.85rem 2.35rem 0.85rem 0.85rem;
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.2s;
   position: relative;
+}
+
+.notification-item.clickable {
+  cursor: pointer;
 }
 
 .notification-item:hover {
@@ -136,11 +148,28 @@
 }
 
 .notification-item.unread {
-  background: #eef2ff;
+  background: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%);
 }
 
 .notification-item.unread:hover {
   background: #e0e7ff;
+}
+
+.notification-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.notification-icon.event {
+  background: #ede9fe;
+  color: #7c3aed;
 }
 
 .notification-content {
@@ -176,8 +205,8 @@
 
 .notification-delete {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+  top: 0.75rem;
+  right: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;

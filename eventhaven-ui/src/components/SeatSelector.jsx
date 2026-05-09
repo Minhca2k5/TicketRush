@@ -4,16 +4,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, RefreshCcw, ShoppingBag, X } from "lucide-react";
 import { mapSeatLayoutToType, mapSeatsToType } from "@/lib/seat-types";
 import { EventHeader } from "./EventHeader";
-import { Stage } from "./Stage";
 import { SeatMap } from "./SeatMap";
 import { Legend } from "./Legend";
 import { BookingCart } from "./BookingCart";
 import { getSeatLayout, getSeatMap } from "../services/eventService";
 import { lockSeat, releaseSeat, checkout } from "../services/bookingService";
+import SeatMapRenderer from "./seat-map/SeatMapRenderer";
 
 const HOLD_MINUTES = 10;
 const POLL_INTERVAL_MS = 5000;
 const HOLDER_STORAGE_KEY = "ticketrush-seat-holder";
+const SELECTION_STORAGE_PREFIX = "ticketrush-seat-selection";
 const CONFLICT_TOAST_MESSAGE = "Ghế này vừa có người đặt, vui lòng chọn ghế khác";
 
 function getOrCreateHolderId() {
@@ -27,12 +28,90 @@ function getOrCreateHolderId() {
   return generated;
 }
 
-export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
+function normalizeCanvasSeatStatus(status) {
+  const normalized = String(status || "").trim().toUpperCase();
+  if (["SOLD", "BOOKED", "UNAVAILABLE"].includes(normalized)) return "SOLD";
+  if (["LOCKED", "WAITING", "HELD", "RESERVED", "IN_QUEUE"].includes(normalized)) return "LOCKED";
+  return "AVAILABLE";
+}
+
+function getCanvasSeatNumber(seatNumber) {
+  const value = String(seatNumber || "");
+  const match = value.match(/(\d+)$/);
+  return match ? Number(match[1]) : 1;
+}
+
+function toBookingSeat(layoutSeat, zone, tier) {
+  const seatNumber = String(layoutSeat.seatNumber || "");
+  const row = layoutSeat.rowName || seatNumber.replace(/\d+$/, "") || "A";
+  const zoneName = zone?.name || zone?.zoneName || "General";
+  return {
+    id: layoutSeat.id,
+    row,
+    number: getCanvasSeatNumber(seatNumber),
+    seatLabel: seatNumber || `${row}${getCanvasSeatNumber(seatNumber)}`,
+    zone: zoneName,
+    zoneName,
+    zoneTitle: zoneName,
+    price: Number(tier?.price ?? zone?.price ?? layoutSeat.price ?? 0),
+    status: normalizeCanvasSeatStatus(layoutSeat.status),
+    lockHolder: layoutSeat.lockHolder ?? null,
+    lockExpiresAt: layoutSeat.lockExpiresAt ?? null,
+  };
+}
+
+function resolveZoneName(seat, fallback = "General") {
+  return seat?.zoneName || seat?.zoneTitle || seat?.venueZone?.name || seat?.zone || fallback;
+}
+
+function getSelectionStorageKey(eventId, holderId) {
+  return `${SELECTION_STORAGE_PREFIX}:${eventId}:${holderId}`;
+}
+
+function readStoredSelection(eventId, holderId) {
+  if (!eventId || !holderId) return null;
+
+  try {
+    const stored = window.localStorage.getItem(getSelectionStorageKey(eventId, holderId));
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSelection(eventId, holderId, payload) {
+  if (!eventId || !holderId) return;
+
+  const key = getSelectionStorageKey(eventId, holderId);
+  if (!payload?.selectedSeatIds?.length) {
+    window.localStorage.removeItem(key);
+    return;
+  }
+
+  window.localStorage.setItem(key, JSON.stringify(payload));
+}
+
+function getSelectionExpirationTime(selectedSeats) {
+  return selectedSeats
+    .map((seat) => new Date(seat.lockExpiresAt || 0).getTime())
+    .filter((value) => !Number.isNaN(value) && value > Date.now())
+    .sort((first, second) => first - second)[0];
+}
+
+function getRestoredTimerStart(selectedSeats, storedExpirationTime) {
+  const expirationTime = Number(storedExpirationTime || getSelectionExpirationTime(selectedSeats) || 0);
+
+  return expirationTime ? expirationTime - HOLD_MINUTES * 60 * 1000 : null;
+}
+
+export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, initialLayout, initialCoordinateLayout }) {
   const [selectedSeats, setSelectedSeats] = useState([]);
   const [timerStart, setTimerStart] = useState(null);
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [showBookingConfirm, setShowBookingConfirm] = useState(false);
   const [seatLayout, setSeatLayout] = useState(initialLayout || null);
+  const [coordinateLayout, setCoordinateLayout] = useState(initialCoordinateLayout || null);
+  const [rawLiveSeats, setRawLiveSeats] = useState(initialRawSeats || []);
   const [liveSeats, setLiveSeats] = useState(() => {
     return initialSeats || [];
   });
@@ -43,19 +122,30 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
   const [toast, setToast] = useState(null);
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [checkoutSuccess, setCheckoutSuccess] = useState(false);
+  const [showHoldExpiredModal, setShowHoldExpiredModal] = useState(false);
   const [orderId, setOrderId] = useState(null);
   const holderIdRef = useRef(null);
   const selectedSeatsRef = useRef([]);
+  const releaseExpiredInFlightRef = useRef(false);
+  const hasHydratedSelectionRef = useRef(false);
 
-  const mergeSeatDetails = useCallback((baseSeat, overrides = {}) => ({
-    ...baseSeat,
-    ...overrides,
-    price: Number(overrides.price ?? baseSeat.price ?? 0),
-    zone: overrides.zone ?? baseSeat.zone,
-    row: overrides.row ?? baseSeat.row,
-    number: overrides.number ?? baseSeat.number,
-    seatLabel: overrides.seatLabel ?? baseSeat.seatLabel ?? `${baseSeat.row}${baseSeat.number}`,
-  }), []);
+  const mergeSeatDetails = useCallback((baseSeat, overrides = {}) => {
+    const zoneName = resolveZoneName(baseSeat, resolveZoneName(overrides));
+
+    return {
+      ...baseSeat,
+      ...overrides,
+      price: Number(overrides.price ?? baseSeat.price ?? 0),
+      zone: zoneName,
+      zoneName,
+      zoneTitle: zoneName,
+      lockHolder: overrides.lockHolder ?? baseSeat.lockHolder ?? null,
+      lockExpiresAt: overrides.lockExpiresAt ?? baseSeat.lockExpiresAt ?? null,
+      row: overrides.row ?? baseSeat.row,
+      number: overrides.number ?? baseSeat.number,
+      seatLabel: overrides.seatLabel ?? baseSeat.seatLabel ?? `${baseSeat.row}${baseSeat.number}`,
+    };
+  }, []);
 
   useEffect(() => {
     selectedSeatsRef.current = selectedSeats;
@@ -66,12 +156,32 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
   }, []);
 
   useEffect(() => {
+    const holderId = holderIdRef.current;
+    if (!eventId || !holderId) return;
+    if (!hasHydratedSelectionRef.current && !selectedSeats.length) return;
+
+    writeStoredSelection(eventId, holderId, {
+      selectedSeatIds: selectedSeats.map((seat) => seat.id),
+      expirationTime: getSelectionExpirationTime(selectedSeats),
+      selectedSeats,
+    });
+  }, [eventId, selectedSeats]);
+
+  useEffect(() => {
     setLiveSeats(initialSeats || []);
   }, [initialSeats]);
 
   useEffect(() => {
+    setRawLiveSeats(initialRawSeats || []);
+  }, [initialRawSeats]);
+
+  useEffect(() => {
     setSeatLayout(initialLayout || null);
   }, [initialLayout]);
+
+  useEffect(() => {
+    setCoordinateLayout(initialCoordinateLayout || null);
+  }, [initialCoordinateLayout]);
 
   useEffect(() => {
     if (!toast) {
@@ -93,6 +203,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
       const mappedSeats = mapSeatsToType(Array.isArray(seatMapPayload) ? seatMapPayload : []);
 
       setSeatLayout(mapped.layout);
+      setRawLiveSeats(Array.isArray(seatMapPayload) ? seatMapPayload : []);
       setLiveSeats(mappedSeats.length ? mappedSeats : mapped.seats);
       setLastSyncAt(Date.now());
       setSyncMessage("");
@@ -149,32 +260,50 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
   }, [liveSeats]);
 
   useEffect(() => {
-    if (!eventId) {
-      return undefined;
+    const holderId = holderIdRef.current;
+    if (!eventId || !holderId || hasHydratedSelectionRef.current || !liveSeats.length) {
+      return;
     }
 
-    const releaseAllSelectedSeats = () => {
-      const holderId = holderIdRef.current;
-      if (!holderId || !selectedSeatsRef.current.length) {
-        return;
-      }
+    const stored = readStoredSelection(eventId, holderId);
+    const storedSeats = Array.isArray(stored?.selectedSeats) ? stored.selectedSeats : [];
+    const storedIds = Array.isArray(stored?.selectedSeatIds) ? stored.selectedSeatIds : [];
+    const storedSeatIds = new Set((storedIds.length ? storedIds : storedSeats.map((seat) => seat.id)).map((id) => String(id)));
+    const storedExpirationTime = Number(stored?.expirationTime || 0);
+    const hasValidStoredHold = !storedExpirationTime || storedExpirationTime > Date.now();
+    const heldSeats = liveSeats.filter((seat) => {
+      const seatId = String(seat.id);
+      const status = String(seat.status || "").toUpperCase();
+      const isStoredSeat = storedSeatIds.has(seatId);
+      const expiresAt = new Date(seat.lockExpiresAt || storedExpirationTime || 0).getTime();
+      const seatHoldStillValid = !expiresAt || Number.isNaN(expiresAt) || expiresAt > Date.now();
+      const isHeldByHolder = seat.lockHolder === holderId;
+      const isRecoverableStoredLock = hasValidStoredHold && isStoredSeat && status === "LOCKED";
 
-      selectedSeatsRef.current.forEach((seat) => {
-        window.fetch(`http://localhost:8080/api/events/${eventId}/seats/${seat.id}/release`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ holderId }),
-          keepalive: true,
-        }).catch(() => {});
+      return (!storedSeatIds.size || isStoredSeat)
+        && seatHoldStillValid
+        && (isHeldByHolder || isRecoverableStoredLock);
+    });
+
+    if (!heldSeats.length) {
+      hasHydratedSelectionRef.current = true;
+      writeStoredSelection(eventId, holderId, null);
+      return;
+    }
+
+    const restoredSeats = heldSeats.map((seat) => {
+      const storedSeat = storedSeats.find((item) => String(item.id) === String(seat.id));
+      return mergeSeatDetails(storedSeat || seat, {
+        ...seat,
+        lockHolder: seat.lockHolder ?? holderId,
+        lockExpiresAt: seat.lockExpiresAt ?? storedSeat?.lockExpiresAt ?? (storedExpirationTime ? new Date(storedExpirationTime).toISOString() : null),
       });
-    };
+    });
 
-    window.addEventListener("beforeunload", releaseAllSelectedSeats);
-    return () => {
-      releaseAllSelectedSeats();
-      window.removeEventListener("beforeunload", releaseAllSelectedSeats);
-    };
-  }, [eventId]);
+    setSelectedSeats(restoredSeats);
+    setTimerStart(getRestoredTimerStart(restoredSeats, stored?.expirationTime));
+    hasHydratedSelectionRef.current = true;
+  }, [eventId, liveSeats, mergeSeatDetails]);
 
   const mutateSeatInFlight = useCallback((seatId, shouldAdd) => {
     setSeatActionInFlight((previous) =>
@@ -213,17 +342,20 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
 
       const lockedSeat = await lockSeat(eventId, seat.id, holderIdRef.current, HOLD_MINUTES);
       const mappedLockedSeat = mapSeatsToType([lockedSeat])[0];
+      const fallbackLockExpiresAt = new Date(Date.now() + HOLD_MINUTES * 60 * 1000).toISOString();
       const nextSeat = mergeSeatDetails(
         seat,
         mappedLockedSeat
           ? {
             ...mappedLockedSeat,
             status: "LOCKED",
+            lockHolder: mappedLockedSeat.lockHolder ?? holderIdRef.current,
+            lockExpiresAt: mappedLockedSeat.lockExpiresAt ?? lockedSeat.lockExpiresAt ?? fallbackLockExpiresAt,
           }
           : {
             status: "LOCKED",
             lockHolder: lockedSeat.lockHolder,
-            lockExpiresAt: lockedSeat.lockExpiresAt,
+            lockExpiresAt: lockedSeat.lockExpiresAt ?? fallbackLockExpiresAt,
           }
       );
 
@@ -264,6 +396,59 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
     await handleSeatSelect(seat);
   }, [handleSeatSelect]);
 
+  const handleCanvasSeatSelect = useCallback((layoutSeat, zone, tier) => {
+    handleSeatSelect(toBookingSeat(layoutSeat, zone, tier));
+  }, [handleSeatSelect]);
+
+  const handleReleaseTicket = useCallback(async () => {
+    const holderId = holderIdRef.current;
+    const seatsToRelease = selectedSeatsRef.current;
+
+    if (!eventId || !holderId || !seatsToRelease.length || releaseExpiredInFlightRef.current) {
+      return;
+    }
+
+    releaseExpiredInFlightRef.current = true;
+    const seatIds = seatsToRelease.map((seat) => seat.id);
+
+    try {
+      const releaseResults = await Promise.allSettled(
+        seatIds.map((seatId) => releaseSeat(eventId, seatId, holderId))
+      );
+      const releasedSeatIds = seatIds.filter((_, index) => releaseResults[index].status === "fulfilled");
+
+      if (!releasedSeatIds.length) {
+        setSyncMessage("Your hold expired, but the seats could not be released. Refreshing seat status...");
+        await syncSeatStatus({ silentError: true });
+        return;
+      }
+
+      setSelectedSeats([]);
+      setTimerStart(null);
+      setShowBookingConfirm(false);
+      setShowMobileCart(false);
+      setLiveSeats((previous) =>
+        previous.map((seat) =>
+          releasedSeatIds.includes(seat.id)
+            ? { ...seat, status: "AVAILABLE", lockHolder: null, lockExpiresAt: null }
+            : seat
+        )
+      );
+      setRawLiveSeats((previous) =>
+        previous.map((seat) =>
+          releasedSeatIds.includes(seat.id)
+            ? { ...seat, status: "AVAILABLE", lockHolder: null, lockExpiresAt: null }
+            : seat
+        )
+      );
+      setSyncMessage("Your hold expired. The selected seats were released.");
+      setShowHoldExpiredModal(true);
+      await syncSeatStatus({ silentError: true });
+    } finally {
+      releaseExpiredInFlightRef.current = false;
+    }
+  }, [eventId, syncSeatStatus]);
+
   const handleCheckout = useCallback(async () => {
     if (!eventId || !holderIdRef.current || !selectedSeats.length) return;
     setIsCheckoutLoading(true);
@@ -288,14 +473,21 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
     () => selectedSeats.reduce((sum, seat) => sum + Number(seat.price || 0), 0),
     [selectedSeats]
   );
+  const selectionExpiresAt = useMemo(() => {
+    const expirationTime = getSelectionExpirationTime(selectedSeats);
+    return expirationTime ? new Date(expirationTime).toISOString() : null;
+  }, [selectedSeats]);
   const seats = useMemo(() => (
     liveSeats.map((seat) => ({
       ...seat,
+      heldByCurrentUser: selectedSeats.some((selectedSeat) => String(selectedSeat.id) === String(seat.id))
+        || (seat.status === "LOCKED" && seat.lockHolder === holderIdRef.current),
       pending: seatActionInFlight.includes(seat.id),
     }))
-  ), [liveSeats, seatActionInFlight]);
+  ), [liveSeats, seatActionInFlight, selectedSeats]);
   const syncLabel = useMemo(() => new Date(lastSyncAt).toLocaleTimeString(), [lastSyncAt]);
   const hasSeatInventory = seats.length > 0;
+  const hasCoordinateLayout = Array.isArray(coordinateLayout?.zones) && coordinateLayout.zones.length > 0;
 
   return (
     <div className="bg-[linear-gradient(180deg,#f8faff_0%,#eef2ff_100%)]">
@@ -330,13 +522,31 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
 
         <div className="mt-8 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-6">
-            <Stage />
-            <SeatMap
-              seats={seats}
-              seatLayout={seatLayout}
-              selectedSeats={selectedSeats}
-              onSeatSelect={handleSeatSelect}
-            />
+            {hasCoordinateLayout ? (
+              <div className="rounded-[28px] border border-white/70 bg-white/85 p-5 shadow-sm md:p-6">
+                <div className="mb-5">
+                  <h3 className="text-lg font-bold text-slate-900">Interactive Seat Map</h3>
+                  <p className="text-sm text-slate-500">
+                    The venue layout is rendered from the admin design canvas, including stage, field, exits, zones, and rotation.
+                  </p>
+                </div>
+                <SeatMapRenderer
+                  isEditable={false}
+                  eventId={eventId}
+                  layout={coordinateLayout}
+                  liveSeats={rawLiveSeats}
+                  selectedSeats={selectedSeats.map((seat) => ({ seat }))}
+                  onToggleSeat={handleCanvasSeatSelect}
+                />
+              </div>
+            ) : (
+              <SeatMap
+                seats={seats}
+                seatLayout={seatLayout}
+                selectedSeats={selectedSeats}
+                onSeatSelect={handleSeatSelect}
+              />
+            )}
             <Legend />
             {!hasSeatInventory ? (
               <div className="rounded-[24px] border border-dashed border-slate-200 bg-white/80 px-5 py-6 text-sm text-slate-500">
@@ -351,7 +561,9 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
                 selectedSeats={selectedSeats}
                 onRemoveSeat={handleRemoveSeat}
                 onBookNow={() => setShowBookingConfirm(true)}
+                onTimerExpired={handleReleaseTicket}
                 timerStart={timerStart}
+                expiresAt={selectionExpiresAt}
                 total={total}
               />
             </div>
@@ -391,7 +603,9 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
                 setShowMobileCart(false);
                 setShowBookingConfirm(true);
               }}
+              onTimerExpired={handleReleaseTicket}
               timerStart={timerStart}
+              expiresAt={selectionExpiresAt}
               total={total}
             />
           </div>
@@ -450,6 +664,31 @@ export function SeatSelector({ eventId, event, initialSeats, initialLayout }) {
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {showHoldExpiredModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm" />
+          <div className="relative w-full max-w-md rounded-[32px] bg-white p-8 text-center shadow-2xl">
+            <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+              <AlertTriangle size={30} />
+            </div>
+            <h3 className="mt-5 text-2xl font-black text-slate-950">Seat Hold Expired</h3>
+            <p className="mt-3 text-sm leading-7 text-slate-500">
+              Thời gian giữ chỗ của bạn đã hết. Ghế đã được giải phóng để người khác có thể đặt.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setShowHoldExpiredModal(false);
+                syncSeatStatus({ silentError: true });
+              }}
+              className="mt-6 w-full rounded-full bg-violet-600 px-6 py-4 text-sm font-bold text-white transition hover:bg-violet-500"
+            >
+              Back to Seat Selection
+            </button>
           </div>
         </div>
       )}

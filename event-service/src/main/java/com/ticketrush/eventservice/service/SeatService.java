@@ -280,6 +280,9 @@ public class SeatService {
         dto.setStatus(seat.getStatus());
         dto.setLockHolder(seat.getLockHolder());
         dto.setLockExpiresAt(seat.getLockExpiresAt());
+        dto.setPosX(seat.getCoordinateX());
+        dto.setPosY(seat.getCoordinateY());
+        dto.setRotation(java.math.BigDecimal.ZERO);
 
         if (seat.getVenueZone() != null) {
             VenueZoneDTO zoneDTO = new VenueZoneDTO();
