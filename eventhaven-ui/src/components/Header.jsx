@@ -30,9 +30,9 @@ export function Header() {
   }, [category]);
   const isAdminRoute = location.pathname.startsWith('/admin');
   const isLandingPage = location.pathname === '/';
-  const isEventsPage = location.pathname === '/events';
+  const isEventsRoute = location.pathname === '/events' || location.pathname.startsWith('/events/');
   const showNavLinks = !isLandingPage;
-  const showDiscoveryControls = showNavLinks && !isEventsPage;
+  const showDiscoveryControls = showNavLinks && !isEventsRoute;
 
   useEffect(() => {
     setQuery(new URLSearchParams(location.search).get('search') || '');

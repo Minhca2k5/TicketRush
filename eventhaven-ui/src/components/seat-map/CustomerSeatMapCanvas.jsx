@@ -87,6 +87,26 @@ function getScreenTopLocalSide(rotation) {
   return localTopVector.y < 0 ? 'minY' : 'maxY';
 }
 
+function getScreenLeftLocalSide(rotation) {
+  const localLeftVector = screenVectorToZoneLocal({ x: -1, y: 0 }, rotation);
+  if (Math.abs(localLeftVector.x) > Math.abs(localLeftVector.y)) {
+    return localLeftVector.x < 0 ? 'minX' : 'maxX';
+  }
+  return localLeftVector.y < 0 ? 'minY' : 'maxY';
+}
+
+function getRowLabelPosition(row, rotation) {
+  const pointOnScreen = rotatePoint({ x: row.x, y: row.y }, rotation);
+  const normalizedRotation = ((Number(rotation || 0) % 360) + 360) % 360;
+  const isSideways = Math.abs(normalizedRotation - 90) < 8 || Math.abs(normalizedRotation - 270) < 8;
+  const labelPointOnScreen = {
+    x: pointOnScreen.x - (isSideways ? 0 : 34),
+    y: pointOnScreen.y - (isSideways ? 28 : 0),
+  };
+
+  return screenVectorToZoneLocal(labelPointOnScreen, rotation);
+}
+
 function expandBoundsForZoneTitle(bounds, rotation) {
   const nextBounds = { ...bounds };
   const side = getScreenTopLocalSide(rotation);
@@ -254,7 +274,11 @@ function getRowLabels(zone) {
     if (!rowName) return;
     const point = layoutSeatPoint(seat);
     const current = rows.get(rowName);
-    if (!current || point.x < current.x) rows.set(rowName, { rowName, ...point });
+    const seatLabelNumber = Number(seatNumberLabel(seat.seatNumber));
+    const isSeatOne = seatLabelNumber === 1;
+    if (!current || (isSeatOne && !current.isSeatOne) || (!current.isSeatOne && point.x < current.x)) {
+      rows.set(rowName, { rowName, isSeatOne, ...point });
+    }
   });
   return Array.from(rows.values()).sort((a, b) => a.y - b.y);
 }
@@ -780,25 +804,30 @@ export default function CustomerSeatMapCanvas({
                   />
                 </Group>
 
-                {rowLabels.map((row) => (
-                  <Group
-                    key={`${zone.id}-row-${row.rowName}`}
-                    x={bounds.minX + 34}
-                    y={row.y}
-                    rotation={-zoneRotation}
-                  >
-                    <Text
-                      x={-12}
-                      y={-8}
-                      width={24}
-                      align="center"
-                      text={row.rowName}
-                      fill="#cbd5e1"
-                      fontStyle="bold"
-                      fontSize={13}
-                    />
-                  </Group>
-                ))}
+                {rowLabels.map((row) => {
+                  const rowLabelPosition = getRowLabelPosition(row, zoneRotation);
+
+                  return (
+                    <Group
+                      key={`${zone.id}-row-${row.rowName}`}
+                      x={rowLabelPosition.x}
+                      y={rowLabelPosition.y}
+                      rotation={-zoneRotation}
+                      listening={false}
+                    >
+                      <Text
+                        x={-12}
+                        y={-8}
+                        width={24}
+                        align="center"
+                        text={row.rowName}
+                        fill="#cbd5e1"
+                        fontStyle="bold"
+                        fontSize={13}
+                      />
+                    </Group>
+                  );
+                })}
 
                 {renderableSeats.map((layoutSeat) => {
                   const liveSeat = liveLookup.byId.get(String(layoutSeat.id))
