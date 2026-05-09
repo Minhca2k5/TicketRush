@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
 import SeatMapRenderer from './seat-map/SeatMapRenderer';
 
@@ -45,6 +45,43 @@ function toDateTimeLocal(value) {
   const offset = date.getTimezoneOffset();
   const local = new Date(date.getTime() - offset * 60 * 1000);
   return local.toISOString().slice(0, 16);
+}
+
+function roundUpToNextMinute(date = new Date()) {
+  const rounded = new Date(date);
+  if (rounded.getSeconds() > 0 || rounded.getMilliseconds() > 0) {
+    rounded.setMinutes(rounded.getMinutes() + 1);
+  }
+  rounded.setSeconds(0, 0);
+  return rounded;
+}
+
+function addMinutes(value, minutes) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  date.setMinutes(date.getMinutes() + minutes);
+  return toDateTimeLocal(date);
+}
+
+function getDateTimeErrors(form, minStartTime) {
+  const nextErrors = {};
+
+  if (!form.startTime) {
+    nextErrors.startTime = 'Start date & time is required';
+  } else if (new Date(form.startTime).getTime() < new Date(minStartTime).getTime()) {
+    nextErrors.startTime = 'Start date & time cannot be in the past';
+  }
+
+  if (form.startTime && form.endTime) {
+    const start = new Date(form.startTime).getTime();
+    const end = new Date(form.endTime).getTime();
+
+    if (!Number.isNaN(start) && !Number.isNaN(end) && end <= start) {
+      nextErrors.endTime = 'End date & time must be after the start date & time';
+    }
+  }
+
+  return nextErrors;
 }
 
 function normalizeInitial(initial) {
@@ -99,6 +136,12 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
   const [form, setForm] = useState(() => normalizeInitial(initial));
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
+  const minStartTime = toDateTimeLocal(roundUpToNextMinute());
+  const minEndTime = form.startTime ? addMinutes(form.startTime, 1) : minStartTime;
+  const timeErrors = useMemo(() => getDateTimeErrors(form, minStartTime), [form, minStartTime]);
+  const hasTimeErrors = Object.keys(timeErrors).length > 0;
+  const startTimeError = errors.startTime || timeErrors.startTime;
+  const endTimeError = errors.endTime || timeErrors.endTime;
 
   useEffect(() => {
     setForm(normalizeInitial(initial));
@@ -107,7 +150,27 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
   }, [initial]);
 
   const setField = (field, value) => {
-    setForm((current) => ({ ...current, [field]: value }));
+    setForm((current) => {
+      const next = { ...current, [field]: value };
+
+      if (field === 'startTime' && next.endTime) {
+        const start = new Date(value).getTime();
+        const end = new Date(next.endTime).getTime();
+
+        if (!Number.isNaN(start) && !Number.isNaN(end) && end <= start) {
+          next.endTime = '';
+        }
+      }
+
+      return next;
+    });
+
+    setErrors((current) => {
+      const nextErrors = { ...current };
+      delete nextErrors[field];
+      if (field === 'startTime') delete nextErrors.endTime;
+      return nextErrors;
+    });
   };
 
   const layoutZones = getLayoutZones(form.seatLayout);
@@ -129,7 +192,10 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
 
     if (step === 2) {
       if (!form.venueAddress.trim()) nextErrors.venueAddress = 'Venue address is required';
-      if (!form.startTime) nextErrors.startTime = 'Start date & time is required';
+    }
+
+    if (step >= 2) {
+      Object.assign(nextErrors, getDateTimeErrors(form, toDateTimeLocal(roundUpToNextMinute())));
     }
 
     if (step === 3) {
@@ -334,19 +400,21 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
-                <Field label="Start Date & Time *" error={errors.startTime}>
+                <Field label="Start Date & Time *" error={startTimeError}>
                   <input
                     type="datetime-local"
-                    className={inputCls(errors.startTime)}
+                    className={inputCls(startTimeError)}
+                    min={minStartTime}
                     value={form.startTime}
                     onChange={(event) => setField('startTime', event.target.value)}
                   />
                 </Field>
 
-                <Field label="End Date & Time">
+                <Field label="End Date & Time" error={endTimeError}>
                   <input
                     type="datetime-local"
-                    className={inputCls()}
+                    className={inputCls(endTimeError)}
+                    min={minEndTime}
                     value={form.endTime}
                     onChange={(event) => setField('endTime', event.target.value)}
                   />
@@ -460,7 +528,7 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
             <button
               type="button"
               onClick={submit}
-              disabled={saving || !isSeatLayoutReady}
+              disabled={saving || !isSeatLayoutReady || hasTimeErrors}
               className="rounded-xl bg-violet-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-60"
             >
               {saving ? 'Saving...' : initial ? 'Update Event' : 'Create Event'}

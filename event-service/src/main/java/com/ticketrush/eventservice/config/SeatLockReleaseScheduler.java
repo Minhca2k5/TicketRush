@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Component
@@ -24,12 +25,19 @@ public class SeatLockReleaseScheduler {
             return;
         }
 
-        List<Seat> lockedSeats = seatRepository.findByStatus("LOCKED");
-        if (lockedSeats.isEmpty()) {
+        List<Seat> expiredLockedSeats = seatRepository.findByStatusAndLockExpiresAtBefore(
+                "LOCKED",
+                LocalDateTime.now()
+        );
+        if (expiredLockedSeats.isEmpty()) {
             return;
         }
 
-        lockedSeats.forEach(seat -> seat.setStatus("AVAILABLE"));
-        seatRepository.saveAll(lockedSeats);
+        expiredLockedSeats.forEach(seat -> {
+            seat.setStatus("AVAILABLE");
+            seat.setLockHolder(null);
+            seat.setLockExpiresAt(null);
+        });
+        seatRepository.saveAll(expiredLockedSeats);
     }
 }

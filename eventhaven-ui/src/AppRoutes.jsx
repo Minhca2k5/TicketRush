@@ -10,6 +10,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import Profile from './components/Profile';
 import TicketSalesPage from './pages/admin/TicketSalesPage';
 import OrderHistory from './pages/OrderHistory';
+import AllEventsPage from './pages/AllEventsPage';
 
 export function AppRoutes() {
   return (
@@ -17,6 +18,7 @@ export function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/" element={<Home />} />
+      <Route path="/events" element={<AllEventsPage />} />
       <Route path="/events/:id" element={<EventDetail />} />
       <Route path="/orders" element={<OrderHistory />} />
       <Route

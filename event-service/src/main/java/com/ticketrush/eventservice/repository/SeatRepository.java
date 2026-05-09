@@ -17,6 +17,7 @@ import java.util.Optional;
 @Repository
 public interface SeatRepository extends JpaRepository<Seat, Long> {
     List<Seat> findByStatus(String status);
+    List<Seat> findByStatusAndLockExpiresAtBefore(String status, LocalDateTime lockExpiresAt);
     List<Seat> findByEventId(Long eventId);
     List<Seat> findByVenueZoneId(Long venueZoneId);
     Optional<Seat> findByIdAndEventId(Long id, Long eventId);

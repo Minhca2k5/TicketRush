@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowRight, CalendarDays, ImageOff, MapPin, Ticket } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
-import { CalendarDays, ImageOff, MapPin, Ticket } from 'lucide-react';
 import api from '../services/api';
 import HeroSlider from './HeroSlider';
 
@@ -215,6 +215,7 @@ export default function Home() {
       return matchesSearch && matchesCategory;
     })
   ), [normalizedEvents, search, category]);
+  const hotEvents = filteredEvents.slice(0, 8);
 
   return (
     <div className="bg-[radial-gradient(circle_at_top_left,_rgba(139,92,246,0.18),_transparent_28%),linear-gradient(180deg,_#f8faff_0%,_#eef2ff_100%)]">
@@ -227,11 +228,13 @@ export default function Home() {
               <p className="text-sm font-semibold uppercase tracking-[0.3em] text-violet-500">Hot Trends</p>
               <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Discover your next live moment</h2>
             </div>
-            {(search || category) && (
-              <p className="text-sm text-slate-500">
-                Showing {filteredEvents.length} result(s){search ? ` for "${search}"` : ''}{category ? ` in ${category}` : ''}.
-              </p>
-            )}
+            <Link
+              to="/events"
+              className="inline-flex w-fit items-center gap-2 rounded-full bg-white/85 px-4 py-2 text-sm font-bold text-violet-700 shadow-sm ring-1 ring-violet-100 transition hover:bg-violet-50 hover:text-violet-800"
+            >
+              See all events
+              <ArrowRight size={16} />
+            </Link>
           </div>
 
           {loading ? (
@@ -254,8 +257,8 @@ export default function Home() {
               ) : null}
 
               <div className="mt-8 grid items-stretch gap-6 md:grid-cols-2 xl:grid-cols-4">
-                {filteredEvents.length ? (
-                  <EventList events={filteredEvents} />
+                {hotEvents.length ? (
+                  <EventList events={hotEvents} />
                 ) : (
                   <div className="col-span-full rounded-2xl border border-dashed border-slate-300 bg-white/80 px-6 py-12 text-center text-slate-500">
                     {normalizedEvents.length

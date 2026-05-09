@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, Menu, Search, Settings, Shield, ShieldCheck, Ticket, UserCircle2 } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
@@ -10,10 +10,10 @@ const navItems = [
 ];
 
 const categoryItems = [
-  { label: 'Concerts', to: '/?category=concerts' },
-  { label: 'Sports', to: '/?category=sports' },
-  { label: 'Theater', to: '/?category=theater' },
-  { label: 'Conference', to: '/?category=conference' },
+  { label: 'Concerts', to: '/events?category=concerts' },
+  { label: 'Sports', to: '/events?category=sports' },
+  { label: 'Theater', to: '/events?category=theater' },
+  { label: 'Conference', to: '/events?category=conference' },
 ];
 
 export function Header() {
@@ -29,6 +29,14 @@ export function Header() {
     return categoryItems.find((item) => new URLSearchParams(item.to.split('?')[1]).get('category') === category)?.label || 'Categories';
   }, [category]);
   const isAdminRoute = location.pathname.startsWith('/admin');
+  const isLandingPage = location.pathname === '/';
+  const isEventsPage = location.pathname === '/events';
+  const showNavLinks = !isLandingPage;
+  const showDiscoveryControls = showNavLinks && !isEventsPage;
+
+  useEffect(() => {
+    setQuery(new URLSearchParams(location.search).get('search') || '');
+  }, [location.search]);
 
   const handleSubmit = (event) => {
     event.preventDefault();
@@ -38,7 +46,8 @@ export function Header() {
     } else {
       params.delete('search');
     }
-    navigate(`/?${params.toString()}`);
+    const queryString = params.toString();
+    navigate(`/events${queryString ? `?${queryString}` : ''}`);
     setMenuOpen(false);
   };
 
@@ -97,51 +106,53 @@ export function Header() {
           <span className="text-2xl font-black tracking-tight text-slate-900">TicketRush</span>
         </Link>
 
-        <nav className="hidden items-center gap-2 lg:flex">
-          {navItems.map((item) => (
-            <Link
-              key={item.label}
-              to={item.to}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                isActive(item.to) ? 'bg-violet-100 text-violet-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setCategoryMenuOpen((value) => !value)}
-              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
-                category ? 'bg-violet-100 text-violet-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              {selectedCategoryLabel}
-              <ChevronDown size={16} className={categoryMenuOpen ? 'rotate-180 transition' : 'transition'} />
-            </button>
-            {categoryMenuOpen && (
-              <div className="absolute left-0 top-full z-50 mt-3 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-200/70">
-                <div className="max-h-80 overflow-y-auto">
-                  {categoryItems.map((item) => (
-                    <Link
-                      key={item.label}
-                      to={item.to}
-                      onClick={() => setCategoryMenuOpen(false)}
-                      className={`block rounded-xl px-4 py-3 text-sm font-semibold transition ${
-                        isActive(item.to) ? 'bg-violet-50 text-violet-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                      }`}
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
+        {showNavLinks && (
+          <nav className="hidden items-center gap-2 lg:flex">
+            {navItems.map((item) => (
+              <Link
+                key={item.label}
+                to={item.to}
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  isActive(item.to) ? 'bg-violet-100 text-violet-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                {item.label}
+              </Link>
+            ))}
+            {showDiscoveryControls && <div className="relative">
+              <button
+                type="button"
+                onClick={() => setCategoryMenuOpen((value) => !value)}
+                className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  category ? 'bg-violet-100 text-violet-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                {selectedCategoryLabel}
+                <ChevronDown size={16} className={categoryMenuOpen ? 'rotate-180 transition' : 'transition'} />
+              </button>
+              {categoryMenuOpen && (
+                <div className="absolute left-0 top-full z-50 mt-3 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-200/70">
+                  <div className="max-h-80 overflow-y-auto">
+                    {categoryItems.map((item) => (
+                      <Link
+                        key={item.label}
+                        to={item.to}
+                        onClick={() => setCategoryMenuOpen(false)}
+                        className={`block rounded-xl px-4 py-3 text-sm font-semibold transition ${
+                          isActive(item.to) ? 'bg-violet-50 text-violet-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                        }`}
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        </nav>
+              )}
+            </div>}
+          </nav>
+        )}
 
-        <form onSubmit={handleSubmit} className="hidden flex-1 justify-center lg:flex">
+        {showDiscoveryControls && <form onSubmit={handleSubmit} className="hidden flex-1 justify-center lg:flex">
           <div className="flex w-full max-w-xl items-center gap-3 rounded-full border border-white/70 bg-white/85 px-4 py-3 shadow-lg shadow-slate-200/60">
             <Search size={18} className="text-violet-500" />
             <input
@@ -151,7 +162,7 @@ export function Header() {
               className="flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
             />
           </div>
-        </form>
+        </form>}
 
         <div className="ml-auto hidden items-center gap-3 lg:flex">
           {token ? (
@@ -195,19 +206,21 @@ export function Header() {
 
       {menuOpen && (
         <div className="border-t border-slate-100 bg-white px-4 py-4 lg:hidden">
-          <form onSubmit={handleSubmit} className="mb-4">
-            <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-slate-50 px-4 py-3">
-              <Search size={18} className="text-violet-500" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search events..."
-                className="flex-1 bg-transparent text-sm text-slate-700 outline-none"
-              />
-            </div>
-          </form>
+          {showDiscoveryControls && (
+            <form onSubmit={handleSubmit} className="mb-4">
+              <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-slate-50 px-4 py-3">
+                <Search size={18} className="text-violet-500" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search events..."
+                  className="flex-1 bg-transparent text-sm text-slate-700 outline-none"
+                />
+              </div>
+            </form>
+          )}
           <div className="space-y-2">
-            {navItems.map((item) => (
+            {showNavLinks && navItems.map((item) => (
               <Link
                 key={item.label}
                 to={item.to}
@@ -217,17 +230,28 @@ export function Header() {
                 {item.label}
               </Link>
             ))}
-            <div className="px-4 pt-3 text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Categories</div>
-            {categoryItems.map((item) => (
-              <Link
-                key={item.label}
-                to={item.to}
-                onClick={() => setMenuOpen(false)}
-                className="block rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-              >
-                {item.label}
-              </Link>
-            ))}
+            {showDiscoveryControls && (
+              <>
+                <div className="px-4 pt-3 text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Categories</div>
+                {categoryItems.map((item) => (
+                  <Link
+                    key={item.label}
+                    to={item.to}
+                    onClick={() => setMenuOpen(false)}
+                    className="block rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </>
+            )}
+            <Link
+              to="/orders"
+              onClick={() => setMenuOpen(false)}
+              className="block rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              My Tickets
+            </Link>
             {role === 'ADMIN' && (
               <Link
                 to="/admin/dashboard"

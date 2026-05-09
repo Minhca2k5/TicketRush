@@ -9,6 +9,8 @@ export interface Seat {
   number: number;     // 1, 2, ...
   seatLabel: string;
   zone: ZoneType;
+  zoneName?: string;
+  zoneTitle?: string;
   price: number;
   status: SeatStatus;
   lockHolder?: string | null;
@@ -93,6 +95,8 @@ export function mapSeatsToType(backendSeats: any[]): Seat[] {
       number,
       seatLabel: seatNumber || `${row}${number}`,
       zone: zone as ZoneType,
+      zoneName: zone,
+      zoneTitle: zone,
       price,
       status,
       lockHolder: s.lockHolder ?? null,
@@ -133,6 +137,8 @@ export function mapSeatLayoutToType(layout: any): { layout: SeatLayoutSummary | 
           number: seatIndex,
           seatLabel: seatNumber || `${rowName}${seatIndex}`,
           zone: zone.zoneName,
+          zoneName: zone.zoneName,
+          zoneTitle: zone.zoneName,
           price: Number(seat.priceTier?.price ?? zone.price ?? 0),
           status: normalizeSeatStatus(seat.status),
           lockHolder: seat.lockHolder ?? null,
