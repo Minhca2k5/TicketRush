@@ -2,12 +2,15 @@ package com.ticketrush.authservice.service;
 
 import com.ticketrush.authservice.model.User;
 import com.ticketrush.authservice.dto.AuthDashboardResponse;
+import com.ticketrush.authservice.dto.AuthSettingsResponse;
+import com.ticketrush.authservice.exception.AuthServiceException;
 import com.ticketrush.authservice.repository.UserRepository;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +29,15 @@ public class AuthService {
     @Value("${jwt.secret}")
     private String jwtSecret;
 
+    @Value("${jwt.expiration:86400000}")
+    private long jwtExpirationMs;
+
+    @Value("${app.seed.admin.username:admin}")
+    private String seededAdminUsername;
+
+    @Value("${app.seed.admin.email:admin@ticketrush.local}")
+    private String seededAdminEmail;
+
     public AuthService(UserRepository userRepository) {
         this.userRepository = userRepository;
     }
@@ -34,7 +46,11 @@ public class AuthService {
         logger.info("Registering user: {}", user.getUsername());
         if (userRepository.findByUsername(user.getUsername()).isPresent()) {
             logger.warn("Username already exists: {}", user.getUsername());
-            throw new RuntimeException("Username already exists");
+            throw new AuthServiceException(HttpStatus.CONFLICT, "Username already exists");
+        }
+        if (userRepository.findByEmail(user.getEmail()).isPresent()) {
+            logger.warn("Email already exists: {}", user.getEmail());
+            throw new AuthServiceException(HttpStatus.CONFLICT, "Email already exists");
         }
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         user.setRole(User.Role.CUSTOMER);
@@ -46,10 +62,10 @@ public class AuthService {
     public String login(String username, String password) {
         logger.info("Login attempt for user: {}", username);
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new AuthServiceException(HttpStatus.UNAUTHORIZED, "Invalid username or password"));
         if (!passwordEncoder.matches(password, user.getPassword())) {
             logger.warn("Invalid password for user: {}", username);
-            throw new RuntimeException("Invalid password");
+            throw new AuthServiceException(HttpStatus.UNAUTHORIZED, "Invalid username or password");
         }
         String token = generateToken(user);
         logger.info("Login successful for user: {}", username);
@@ -62,7 +78,7 @@ public class AuthService {
                 .setSubject(user.getId().toString())
                 .claim("role", user.getRole())
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + 86400000)) // 24h
+                .setExpiration(new Date(System.currentTimeMillis() + jwtExpirationMs))
                 .signWith(key)
                 .compact();
     }
@@ -72,26 +88,54 @@ public class AuthService {
             Key key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
             return Long.parseLong(Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token).getBody().getSubject());
         } catch (Exception e) {
-            throw new RuntimeException("Invalid token");
+            throw new AuthServiceException(HttpStatus.UNAUTHORIZED, "Invalid token");
         }
     }
 
     public User getProfile(String token) {
         Long userId = validateToken(token);
         logger.info("Getting profile for user: {}", userId);
-        return userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new AuthServiceException(HttpStatus.NOT_FOUND, "User not found"));
     }
 
     public User updateProfile(String token, User updates) {
         Long userId = validateToken(token);
         logger.info("Updating profile for user: {}", userId);
-        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthServiceException(HttpStatus.NOT_FOUND, "User not found"));
+        if (updates.getEmail() != null && userRepository.findByEmail(updates.getEmail())
+                .filter(existing -> !existing.getId().equals(userId))
+                .isPresent()) {
+            throw new AuthServiceException(HttpStatus.CONFLICT, "Email already exists");
+        }
         if (updates.getEmail() != null) user.setEmail(updates.getEmail());
         if (updates.getAge() != null) user.setAge(updates.getAge());
         if (updates.getGender() != null) user.setGender(updates.getGender());
         User saved = userRepository.save(user);
         logger.info("Profile updated for user: {}", userId);
         return saved;
+    }
+
+    public void requireAdmin(String token) {
+        User user = getProfile(token);
+        if (user.getRole() != User.Role.ADMIN) {
+            throw new AuthServiceException(HttpStatus.FORBIDDEN, "Admin role required");
+        }
+    }
+
+    public List<User> getUsers() {
+        return userRepository.findAll();
+    }
+
+    public AuthSettingsResponse getSettings() {
+        return new AuthSettingsResponse(
+                "auth-service",
+                jwtExpirationMs,
+                seededAdminUsername,
+                seededAdminEmail,
+                "BCrypt"
+        );
     }
 
     public AuthDashboardResponse getDashboardSummary() {

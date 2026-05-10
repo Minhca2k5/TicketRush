@@ -10,6 +10,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import Profile from './components/Profile';
 import TicketSalesPage from './pages/admin/TicketSalesPage';
 import OrderHistory from './pages/OrderHistory';
+import AdminUtilityPage from './pages/admin/AdminUtilityPage';
 import AllEventsPage from './pages/AllEventsPage';
 
 export function AppRoutes() {
@@ -66,6 +67,46 @@ export function AppRoutes() {
         element={
           <ProtectedRoute requiredRole="ADMIN">
             <TicketSalesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/customers"
+        element={
+          <ProtectedRoute requiredRole="ADMIN">
+            <AdminUtilityPage type="customers" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/reports"
+        element={
+          <ProtectedRoute requiredRole="ADMIN">
+            <AdminUtilityPage type="reports" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/settings"
+        element={
+          <ProtectedRoute requiredRole="ADMIN">
+            <AdminUtilityPage type="settings" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/help"
+        element={
+          <ProtectedRoute requiredRole="ADMIN">
+            <AdminUtilityPage type="help" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/status"
+        element={
+          <ProtectedRoute requiredRole="ADMIN">
+            <AdminUtilityPage type="status" />
           </ProtectedRoute>
         }
       />

@@ -1,6 +1,7 @@
 package com.ticketrush.authservice.config;
 
 import com.ticketrush.authservice.dto.ApiResponse;
+import com.ticketrush.authservice.exception.AuthServiceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -19,13 +20,13 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiResponse.failure(message));
     }
 
+    @ExceptionHandler(AuthServiceException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAuthService(AuthServiceException exception) {
+        return ResponseEntity.status(exception.getStatus()).body(ApiResponse.failure(exception.getMessage()));
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ApiResponse<Void>> handleRuntime(RuntimeException exception) {
-        HttpStatus status = switch (exception.getMessage()) {
-            case "Invalid token" -> HttpStatus.UNAUTHORIZED;
-            case "User not found", "Invalid password" -> HttpStatus.BAD_REQUEST;
-            default -> HttpStatus.BAD_REQUEST;
-        };
-        return ResponseEntity.status(status).body(ApiResponse.failure(exception.getMessage()));
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.failure("Unexpected server error"));
     }
 }

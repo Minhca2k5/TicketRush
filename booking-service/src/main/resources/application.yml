@@ -1,11 +1,11 @@
 server:
-  port: 8080
+  port: 8083
 
 spring:
   application:
     name: booking-service
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:booking_db}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:ticketrush}
     username: ${DB_USERNAME:minh}
     password: ${DB_PASSWORD:minh123}
   jpa:

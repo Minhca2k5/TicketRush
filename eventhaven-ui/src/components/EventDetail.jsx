@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { SeatSelector } from './SeatSelector';
 import { WaitingRoom } from './WaitingRoom';
@@ -13,7 +13,18 @@ export default function EventDetail() {
   const [rawSeatInventory, setRawSeatInventory] = useState([]);
   const [coordinateLayout, setCoordinateLayout] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isAdmitted, setIsAdmitted] = useState(false);
+  const [isAdmitted, setIsAdmitted] = useState(() => (
+    window.sessionStorage.getItem(`ticketrush-admitted-${id}`) === 'true'
+  ));
+
+  const handleAdmit = useCallback(() => {
+    window.sessionStorage.setItem(`ticketrush-admitted-${id}`, 'true');
+    setIsAdmitted(true);
+  }, [id]);
+
+  useEffect(() => {
+    setIsAdmitted(window.sessionStorage.getItem(`ticketrush-admitted-${id}`) === 'true');
+  }, [id]);
 
   useEffect(() => {
     let ignore = false;
@@ -67,7 +78,7 @@ export default function EventDetail() {
   }
 
   if (!isAdmitted) {
-    return <WaitingRoom eventId={event.id || Number(id)} onAdmit={() => setIsAdmitted(true)} />;
+    return <WaitingRoom eventId={event.id || Number(id)} onAdmit={handleAdmit} />;
   }
 
   return (
