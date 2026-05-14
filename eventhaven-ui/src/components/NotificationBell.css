@@ -39,12 +39,6 @@
   justify-content: center;
 }
 
-.notification-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 98;
-}
-
 .notification-dropdown {
   position: absolute;
   top: calc(100% + 8px);

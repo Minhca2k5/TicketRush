@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, Menu, Search, Settings, ShieldCheck, Ticket, UserCircle2 } from 'lucide-react';
+import { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { Menu, Settings, ShieldCheck, Ticket, UserCircle2 } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
 import { UserMenu } from './UserMenu';
 import { getAuthRole, getAuthToken } from '../lib/auth';
@@ -9,54 +9,16 @@ const navItems = [
   { label: 'Home', to: '/' },
 ];
 
-const categoryItems = [
-  { label: 'Concerts', to: '/events?category=concerts' },
-  { label: 'Sports', to: '/events?category=sports' },
-  { label: 'Theater', to: '/events?category=theater' },
-  { label: 'Conference', to: '/events?category=conference' },
-];
-
 export function Header() {
-  const navigate = useNavigate();
   const location = useLocation();
-  const [query, setQuery] = useState(new URLSearchParams(location.search).get('search') || '');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const token = getAuthToken();
-  const role = getAuthRole();
-  const category = useMemo(() => new URLSearchParams(location.search).get('category') || '', [location.search]);
-  const selectedCategoryLabel = useMemo(() => {
-    return categoryItems.find((item) => new URLSearchParams(item.to.split('?')[1]).get('category') === category)?.label || 'Categories';
-  }, [category]);
   const isAdminRoute = location.pathname.startsWith('/admin');
   const isLandingPage = location.pathname === '/';
-  const isEventsRoute = location.pathname === '/events' || location.pathname.startsWith('/events/');
   const showNavLinks = !isLandingPage;
-  const showDiscoveryControls = showNavLinks && !isEventsRoute;
-
-  useEffect(() => {
-    setQuery(new URLSearchParams(location.search).get('search') || '');
-  }, [location.search]);
-
-  const handleSubmit = (event) => {
-    event.preventDefault();
-    const params = new URLSearchParams(location.search);
-    if (query.trim()) {
-      params.set('search', query.trim());
-    } else {
-      params.delete('search');
-    }
-    const queryString = params.toString();
-    navigate(`/events${queryString ? `?${queryString}` : ''}`);
-    setMenuOpen(false);
-  };
 
   const isActive = (to) => {
-    if (to === '/') return location.pathname === '/' && !category;
-    if (to.includes('category=')) {
-      return new URLSearchParams(to.split('?')[1]).get('category') === category;
-    }
-    return false;
+    return to === '/' && location.pathname === '/';
   };
 
   if (isAdminRoute) {
@@ -119,53 +81,7 @@ export function Header() {
                 {item.label}
               </Link>
             ))}
-            {showDiscoveryControls && (
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setCategoryMenuOpen((value) => !value)}
-                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
-                    category ? 'bg-violet-100 text-violet-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                  }`}
-                >
-                  {selectedCategoryLabel}
-                  <ChevronDown size={16} className={categoryMenuOpen ? 'rotate-180 transition' : 'transition'} />
-                </button>
-                {categoryMenuOpen && (
-                  <div className="absolute left-0 top-full z-50 mt-3 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-200/70">
-                    <div className="max-h-80 overflow-y-auto">
-                      {categoryItems.map((item) => (
-                        <Link
-                          key={item.label}
-                          to={item.to}
-                          onClick={() => setCategoryMenuOpen(false)}
-                          className={`block rounded-xl px-4 py-3 text-sm font-semibold transition ${
-                            isActive(item.to) ? 'bg-violet-50 text-violet-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                          }`}
-                        >
-                          {item.label}
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </nav>
-        )}
-
-        {showDiscoveryControls && (
-          <form onSubmit={handleSubmit} className="hidden flex-1 justify-center lg:flex">
-            <div className="flex w-full max-w-xl items-center gap-3 rounded-full border border-white/70 bg-white/85 px-4 py-3 shadow-lg shadow-slate-200/60">
-              <Search size={18} className="text-violet-500" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search events, venues, or artists"
-                className="flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
-              />
-            </div>
-          </form>
         )}
 
         <div className="ml-auto hidden items-center gap-3 lg:flex">
@@ -201,19 +117,6 @@ export function Header() {
 
       {menuOpen && (
         <div className="border-t border-slate-100 bg-white px-4 py-4 lg:hidden">
-          {showDiscoveryControls && (
-            <form onSubmit={handleSubmit} className="mb-4">
-              <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-slate-50 px-4 py-3">
-                <Search size={18} className="text-violet-500" />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search events..."
-                  className="flex-1 bg-transparent text-sm text-slate-700 outline-none"
-                />
-              </div>
-            </form>
-          )}
           <div className="space-y-2">
             {showNavLinks && navItems.map((item) => (
               <Link
@@ -225,21 +128,6 @@ export function Header() {
                 {item.label}
               </Link>
             ))}
-            {showDiscoveryControls && (
-              <>
-                <div className="px-4 pt-3 text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Categories</div>
-                {categoryItems.map((item) => (
-                  <Link
-                    key={item.label}
-                    to={item.to}
-                    onClick={() => setMenuOpen(false)}
-                    className="block rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </>
-            )}
             <Link
               to="/orders"
               onClick={() => setMenuOpen(false)}

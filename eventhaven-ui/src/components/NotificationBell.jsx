@@ -50,6 +50,7 @@ export function NotificationBell() {
     readJsonStorage(NOTIFICATION_STORAGE_KEY, []).map(normalizeNotification)
   ));
   const [unreadCount, setUnreadCount] = useState(0);
+  const containerRef = useRef(null);
   const isPollingRef = useRef(false);
 
   useEffect(() => {
@@ -76,6 +77,7 @@ export function NotificationBell() {
 
   const clearAll = () => {
     setNotifications([]);
+    setIsOpen(false);
   };
 
   const timeAgo = (date) => {
@@ -150,8 +152,26 @@ export function NotificationBell() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const handleClickOutside = (event) => {
+      if (!containerRef.current?.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isOpen]);
+
   return (
-    <div className="notification-container">
+    <div className="notification-container" ref={containerRef}>
       <button
         className="notification-bell"
         onClick={() => setIsOpen((value) => !value)}
@@ -165,7 +185,6 @@ export function NotificationBell() {
 
       {isOpen && (
         <>
-          <div className="notification-backdrop" onClick={() => setIsOpen(false)} />
           <div className="notification-dropdown">
             <div className="notification-header">
               <div>
@@ -174,11 +193,23 @@ export function NotificationBell() {
               </div>
               {notifications.length > 0 && (
                 <div className="notification-actions">
-                  <button onClick={markAllAsRead} title="Mark all as read">
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      markAllAsRead();
+                    }}
+                    title="Mark all as read"
+                  >
                     <Check size={14} />
                     <span>Read all</span>
                   </button>
-                  <button onClick={clearAll} title="Clear all">
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      clearAll();
+                    }}
+                    title="Clear all"
+                  >
                     <Trash2 size={14} />
                     <span>Clear</span>
                   </button>

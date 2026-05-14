@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Header } from '../components/Header';
 import { getUserOrders } from '../services/bookingService';
 
 const HOLDER_STORAGE_KEY = "ticketrush-seat-holder";
@@ -80,8 +79,6 @@ export default function OrderHistory() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Header />
-      
       <main className="max-w-5xl mx-auto px-4 py-12">
         <div className="mb-8">
           <h1 className="text-3xl sm:text-4xl font-black text-slate-900">My Tickets</h1>

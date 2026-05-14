@@ -67,7 +67,7 @@ services:
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: ticketrush
+      DB_NAME: booking_db
       DB_USERNAME: minh
       DB_PASSWORD: minh123
       EVENT_SERVICE_URL: http://event-service:8082
