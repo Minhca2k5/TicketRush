@@ -20,6 +20,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import EventFormModal from './EventFormModal';
 import { UserMenu } from './UserMenu';
+import { getAdminEventStatus } from '../lib/event-status';
 
 const PAGE_SIZE = 6;
 
@@ -38,6 +39,7 @@ const sidebarSupport = [
 ];
 
 const statusFilters = ['All', 'Live', 'Draft', 'Past', 'Pending'];
+const EVENT_IMAGE_FALLBACK = 'https://via.placeholder.com/80x80?text=Event';
 
 const fallbackEvents = [
   { id: 1, name: 'Summer Music Festival 2024', description: 'Outdoor live concert with premium seating.', location: 'Central Park, NYC', startTime: '2026-07-15T19:30:00', imageUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=900&q=80', organizer: 'Aurora Entertainment' },
@@ -67,19 +69,20 @@ function inferCategory(event) {
   return 'General';
 }
 
-function inferStatus(startTime) {
-  if (!startTime) return 'Draft';
-  const diff = new Date(startTime).getTime() - Date.now();
-  if (diff < -(1000 * 60 * 60 * 8)) return 'Past';
-  if (diff < 0) return 'Live';
-  if (diff < 1000 * 60 * 60 * 24 * 14) return 'Pending';
-  return 'Draft';
-}
+function resolveTicketProgress(event) {
+  const total = Number(event.totalSeats ?? event.seatCount ?? event.venue?.totalCapacity ?? 0);
+  const sold = Number(event.soldSeats ?? event.bookedSeats ?? event.soldTickets ?? 0);
+  const locked = Number(event.lockedSeats ?? event.heldSeats ?? 0);
+  const available = Number(event.availableSeats ?? Math.max(total - sold - locked, 0));
+  const percent = total > 0 ? Math.round((sold / total) * 100) : 0;
 
-function inferProgress(event, index) {
-  const total = 300 + index * 120;
-  const sold = Math.min(total, Math.round(total * (0.35 + ((index % 4) * 0.14))));
-  return { sold, total, percent: Math.max(6, Math.min(100, Math.round((sold / total) * 100))) };
+  return {
+    sold,
+    total,
+    locked,
+    available,
+    percent: Math.max(total > 0 && sold > 0 ? 4 : 0, Math.min(100, percent)),
+  };
 }
 
 function statusBadgeClass(status) {
@@ -87,6 +90,32 @@ function statusBadgeClass(status) {
   if (status === 'Pending') return 'bg-amber-50 text-amber-700 ring-amber-200';
   if (status === 'Past') return 'bg-slate-100 text-slate-500 ring-slate-200';
   return 'bg-slate-100 text-slate-600 ring-slate-200';
+}
+
+function resolveEventImage(event) {
+  return event?.bannerUrl
+    || event?.imageUrl
+    || event?.posterUrl
+    || event?.thumbnailUrl
+    || event?.image
+    || EVENT_IMAGE_FALLBACK;
+}
+
+function EventThumbnail({ event }) {
+  const [src, setSrc] = useState(() => resolveEventImage(event));
+
+  useEffect(() => {
+    setSrc(resolveEventImage(event));
+  }, [event]);
+
+  return (
+    <img
+      src={src}
+      alt={event.name}
+      className="h-14 w-14 rounded-2xl object-cover shadow-sm"
+      onError={() => setSrc(EVENT_IMAGE_FALLBACK)}
+    />
+  );
 }
 
 function DeleteConfirmModal({ event, onCancel, onConfirm, deleting }) {
@@ -157,19 +186,12 @@ export default function AdminEvents() {
   }, [toast]);
 
   const normalizedEvents = useMemo(() => {
-    return events.map((event, index) => {
-      const progress = inferProgress(event, index);
-      const normalizedStatus = String(event.status || inferStatus(event.startTime)).trim().toUpperCase();
+    return events.map((event) => {
+      const progress = resolveTicketProgress(event);
       return {
         ...event,
         category: event.category || inferCategory(event),
-        status: normalizedStatus === 'LIVE'
-          ? 'Live'
-          : normalizedStatus === 'PENDING'
-            ? 'Pending'
-            : normalizedStatus === 'PAST'
-              ? 'Past'
-              : 'Draft',
+        status: getAdminEventStatus(event),
         organizer: event.organizer || 'TicketRush Organizer',
         venueLabel: event.venue?.name || event.location || 'Venue TBD',
         progress,
@@ -232,17 +254,7 @@ export default function AdminEvents() {
   return (
     <div className="min-h-screen bg-[#f4f7fb] font-sans text-slate-900">
       <div className="grid min-h-screen lg:grid-cols-[300px_minmax(0,1fr)]">
-        <aside className="border-r border-[#dde6f0] bg-white">
-          <div className="flex items-center gap-4 border-b border-[#e8edf4] px-8 py-7">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-b from-violet-500 to-indigo-600 text-white shadow-lg shadow-violet-500/25">
-              <Ticket size={18} />
-            </div>
-            <div>
-              <p className="text-lg font-black text-slate-950">TicketRush</p>
-              <p className="text-sm text-slate-500">Admin Portal</p>
-            </div>
-          </div>
-
+        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] self-start flex-col overflow-y-auto border-r border-[#dde6f0] bg-white lg:flex">
           <div className="px-5 py-7">
             <p className="px-4 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Main</p>
             <div className="mt-4 space-y-2">
@@ -410,11 +422,7 @@ export default function AdminEvents() {
                           <tr key={event.id} className="border-t border-slate-100 text-sm text-slate-600 transition hover:bg-slate-50/70">
                             <td className="px-6 py-5">
                               <div className="flex items-center gap-4">
-                                <img
-                                  src={event.imageUrl || 'https://via.placeholder.com/80x80?text=Event'}
-                                  alt={event.name}
-                                  className="h-14 w-14 rounded-2xl object-cover shadow-sm"
-                                />
+                                <EventThumbnail event={event} />
                                 <div>
                                   <p className="font-bold text-slate-950">{event.name}</p>
                                   <p className="mt-1 text-xs text-slate-500">{event.organizer}</p>
@@ -435,7 +443,7 @@ export default function AdminEvents() {
                               <div className="min-w-[200px]">
                                 <div className="mb-2 flex items-center justify-between text-xs font-medium text-slate-500">
                                   <span>{event.progress.sold} sold</span>
-                                  <span>{event.progress.total} capacity</span>
+                                  <span>{event.progress.total} seats</span>
                                 </div>
                                 <div className="h-2 rounded-full bg-slate-100">
                                   <div
@@ -443,6 +451,10 @@ export default function AdminEvents() {
                                     style={{ width: `${event.progress.percent}%` }}
                                   />
                                 </div>
+                                <p className="mt-1 text-[11px] font-medium text-slate-400">
+                                  {event.progress.available} available
+                                  {event.progress.locked ? ` · ${event.progress.locked} locked` : ''}
+                                </p>
                               </div>
                             </td>
                             <td className="px-4 py-5">

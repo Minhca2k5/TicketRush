@@ -11,6 +11,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
@@ -91,6 +92,7 @@ public class BookingService {
 
         Order order = new Order();
         order.setUserId(request.getHolderId());
+        order.setEventId(request.getEventId());
         order.setTotalPrice(totalPrice);
         order.setStatus("PAID");
         order = orderRepository.save(order);
@@ -113,6 +115,7 @@ public class BookingService {
         OrderDTO orderDTO = new OrderDTO();
         orderDTO.setId(order.getId());
         orderDTO.setUserId(order.getUserId());
+        orderDTO.setEventId(order.getEventId());
         orderDTO.setTotalPrice(order.getTotalPrice());
         orderDTO.setStatus(order.getStatus());
         orderDTO.setCreatedAt(order.getCreatedAt());
@@ -123,25 +126,35 @@ public class BookingService {
 
     public List<OrderDTO> getUserOrders(String userId) {
         List<Order> orders = orderRepository.findByUserId(userId);
-        return orders.stream().map(order -> {
-            OrderDTO dto = new OrderDTO();
-            dto.setId(order.getId());
-            dto.setUserId(order.getUserId());
-            dto.setTotalPrice(order.getTotalPrice());
-            dto.setStatus(order.getStatus());
-            dto.setCreatedAt(order.getCreatedAt());
-            
-            List<TicketDTO> ticketDTOs = ticketRepository.findByOrderId(order.getId()).stream()
-                .map(ticket -> {
-                    TicketDTO tDto = new TicketDTO();
-                    tDto.setId(ticket.getId());
-                    tDto.setSeatId(ticket.getSeatId());
-                    tDto.setQrCodeToken(ticket.getQrCodeToken());
-                    return tDto;
-                }).collect(Collectors.toList());
-                
-            dto.setTickets(ticketDTOs);
-            return dto;
-        }).collect(Collectors.toList());
+        return orders.stream().map(this::mapOrderToDTO).collect(Collectors.toList());
+    }
+
+    public List<OrderDTO> getAllOrders() {
+        return orderRepository.findAll(Sort.by(Sort.Direction.DESC, "createdAt"))
+                .stream()
+                .map(this::mapOrderToDTO)
+                .collect(Collectors.toList());
+    }
+
+    private OrderDTO mapOrderToDTO(Order order) {
+        OrderDTO dto = new OrderDTO();
+        dto.setId(order.getId());
+        dto.setUserId(order.getUserId());
+        dto.setEventId(order.getEventId());
+        dto.setTotalPrice(order.getTotalPrice());
+        dto.setStatus(order.getStatus());
+        dto.setCreatedAt(order.getCreatedAt());
+
+        List<TicketDTO> ticketDTOs = ticketRepository.findByOrderId(order.getId()).stream()
+            .map(ticket -> {
+                TicketDTO tDto = new TicketDTO();
+                tDto.setId(ticket.getId());
+                tDto.setSeatId(ticket.getSeatId());
+                tDto.setQrCodeToken(ticket.getQrCodeToken());
+                return tDto;
+            }).collect(Collectors.toList());
+
+        dto.setTickets(ticketDTOs);
+        return dto;
     }
 }

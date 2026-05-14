@@ -386,7 +386,7 @@ class EventDomainIntegrationTests {
     }
 
     @Test
-    void deleteEventFailsWhenSoldSeatsExist() {
+    void deleteEventRemovesEventEvenWhenSoldSeatsExist() {
         Venue venue = createVenue("Delete Guard Arena", "Boston, MA", 9500);
         Event event = createEventEntity("Protected Event", venue);
 
@@ -403,10 +403,11 @@ class EventDomainIntegrationTests {
         seatService.lockSeat(event.getId(), soldSeat.getId(), "buyer-1", 10);
         seatService.purchaseSeats(event.getId(), List.of(soldSeat.getId()), "buyer-1");
 
-        assertThatThrownBy(() -> eventService.deleteEvent(event.getId()))
-                .hasMessageContaining("sold tickets");
+        eventService.deleteEvent(event.getId());
 
-        assertThat(eventRepository.findById(event.getId())).isPresent();
+        assertThat(eventRepository.findById(event.getId())).isEmpty();
+        assertThat(seatRepository.findByEventId(event.getId())).isEmpty();
+        assertThat(eventPriceTierRepository.findByEventId(event.getId())).isEmpty();
     }
 
     @Test

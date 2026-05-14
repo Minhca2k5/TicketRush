@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { isEventBookable } from '../lib/event-status';
 import './CustomerHome.css';
 
 /* ── SVG icons ── */
@@ -333,7 +334,7 @@ export default function CustomerHome() {
         const payload = r.data?.data;
         // If it's paginated, it has .content, otherwise it might just be the array
         const eventsArray = payload?.content || payload || r.data || [];
-        setEvents(Array.isArray(eventsArray) ? eventsArray : []);
+        setEvents(Array.isArray(eventsArray) ? eventsArray.filter((event) => isEventBookable(event)) : []);
       })
       .catch(() => setEvents([]))
       .finally(() => setLoading(false));

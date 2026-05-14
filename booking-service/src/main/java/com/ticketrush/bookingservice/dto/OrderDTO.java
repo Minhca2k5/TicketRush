@@ -9,6 +9,7 @@ import java.util.List;
 public class OrderDTO {
     private Long id;
     private String userId;
+    private Long eventId;
     private BigDecimal totalPrice;
     private String status;
     private LocalDateTime createdAt;

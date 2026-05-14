@@ -371,14 +371,6 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
 
           {step === 2 && (
             <>
-              <div className="rounded-2xl border border-dashed border-violet-200 bg-violet-50/50 p-4">
-                <p className="text-sm font-semibold text-slate-700">Event Banner / Media</p>
-                <p className="mt-1 text-xs text-slate-500">Use an image URL for now. This block can later be connected to file storage.</p>
-                <div className="mt-3 flex min-h-[120px] items-center justify-center rounded-2xl border border-dashed border-violet-200 bg-white text-sm text-slate-400">
-                  Event banner upload placeholder
-                </div>
-              </div>
-
               <div className="grid gap-4 md:grid-cols-2">
                 <Field label="Venue Name" hint="Optional. We'll keep the current name if you leave it empty on edit.">
                   <input

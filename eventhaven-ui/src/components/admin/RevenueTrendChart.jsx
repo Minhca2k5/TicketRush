@@ -1,5 +1,7 @@
 export default function RevenueTrendChart({ data, formatCurrency }) {
-  const peak = Math.max(...data.map((item) => item.value), 1);
+  const values = data.map((item) => Number(item.value || 0));
+  const peakValue = Math.max(...values, 0);
+  const chartPeak = Math.max(peakValue, 1);
 
   return (
     <div className="rounded-[28px] border border-[#dfe7f2] bg-white p-6 shadow-[0_12px_36px_rgba(15,23,42,0.05)]">
@@ -9,7 +11,7 @@ export default function RevenueTrendChart({ data, formatCurrency }) {
           <p className="mt-2 text-sm text-slate-500">Daily revenue performance across the selected time range.</p>
         </div>
         <p className="text-sm font-semibold text-violet-600">
-          Peak day: {formatCurrency(peak)}
+          Peak day: {formatCurrency(peakValue)}
         </p>
       </div>
 
@@ -21,7 +23,7 @@ export default function RevenueTrendChart({ data, formatCurrency }) {
               <div className="flex h-[180px] w-full items-end rounded-[24px] bg-slate-50 px-2 py-2">
                 <div
                   className="w-full rounded-[18px] bg-gradient-to-t from-violet-600 via-violet-500 to-fuchsia-400 shadow-[0_10px_18px_rgba(139,92,246,0.25)]"
-                  style={{ height: `${Math.max(12, Math.round((point.value / peak) * 100))}%` }}
+                  style={{ height: `${point.value > 0 ? Math.max(12, Math.round((point.value / chartPeak) * 100)) : 0}%` }}
                 />
               </div>
               <span className="text-xs font-medium text-slate-500">{point.label}</span>

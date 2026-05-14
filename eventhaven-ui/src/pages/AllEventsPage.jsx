@@ -3,6 +3,7 @@ import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { CalendarDays, ChevronLeft, ChevronRight, ImageOff, MapPin, Search, Ticket } from 'lucide-react';
 import api from '../services/api';
 import { getEventPriceInfo } from '../lib/event-pricing';
+import { isEventBookable } from '../lib/event-status';
 
 const PAGE_SIZE = 24;
 
@@ -169,7 +170,7 @@ export default function AllEventsPage() {
   }, [currentPage]);
 
   const normalizedEvents = useMemo(() => (
-    events.map((event) => ({
+    events.filter((event) => isEventBookable(event)).map((event) => ({
       ...event,
       category: normalizeCategory(event.category || inferCategory(event)),
     }))

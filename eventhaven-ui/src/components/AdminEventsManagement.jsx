@@ -2,16 +2,17 @@ import { useState, useEffect, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import EventFormModal from './EventFormModal';
+import { getAdminEventStatus } from '../lib/event-status';
 
 /* ── helpers ── */
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '-';
 
-function getStatus(startTime) {
-  const diff = new Date(startTime) - new Date();
-  if (diff < 0) return { label:'Past',    color:'bg-gray-100 text-gray-600' };
-  if (diff < 259200000) return { label:'Live',    color:'bg-green-100 text-green-700' };
-  if (diff < 1209600000) return { label:'Pending', color:'bg-yellow-100 text-yellow-700' };
-  return { label:'Draft', color:'bg-slate-100 text-slate-600' };
+function getStatus(event) {
+  const label = getAdminEventStatus(event);
+  if (label === 'Past') return { label, color:'bg-gray-100 text-gray-600' };
+  if (label === 'Live') return { label, color:'bg-green-100 text-green-700' };
+  if (label === 'Pending') return { label, color:'bg-yellow-100 text-yellow-700' };
+  return { label, color:'bg-slate-100 text-slate-600' };
 }
 
 function guessCategory(ev) {
@@ -91,7 +92,7 @@ const AdminEventsManagement = memo(({ onToast }) => {
 
   const filtered = events.filter(ev => {
     const matchSearch = !search || ev.name?.toLowerCase().includes(search.toLowerCase()) || ev.venue?.name?.toLowerCase().includes(search.toLowerCase());
-    const st = getStatus(ev.startTime);
+    const st = getStatus(ev);
     const matchStatus = statusFilter === 'All' || st.label === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -164,7 +165,7 @@ const AdminEventsManagement = memo(({ onToast }) => {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {paginated.map(ev => {
-                  const status = getStatus(ev.startTime);
+                  const status = getStatus(ev);
                   const cat = guessCategory(ev);
                   const sold = Math.floor(Math.random() * 200) + 50;
                   const cap = sold + Math.floor(Math.random() * 300) + 100;

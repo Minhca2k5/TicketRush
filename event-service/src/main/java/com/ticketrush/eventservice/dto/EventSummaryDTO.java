@@ -24,4 +24,8 @@ public class EventSummaryDTO {
     private VenueDTO venue;
     private BigDecimal minPrice;
     private Boolean soldOut;
+    private int totalSeats;
+    private int availableSeats;
+    private int lockedSeats;
+    private int soldSeats;
 }

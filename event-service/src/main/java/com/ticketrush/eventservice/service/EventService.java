@@ -123,10 +123,6 @@ public class EventService {
         Event event = eventRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Event not found"));
 
-        if (hasSoldSeats(id)) {
-            throw new RuntimeException("Cannot delete an event with sold tickets");
-        }
-
         Venue venue = event.getVenue();
         CleanupSnapshot cleanupSnapshot = clearEventArtifacts(event.getId());
         eventRepository.delete(event);
@@ -184,7 +180,12 @@ public class EventService {
         event.setEndTime(dto.getEndTime());
         event.setStatus(resolveStatus(dto));
 
-        String resolvedImageUrl = firstNonBlank(dto.getImageUrl(), dto.getBannerUrl());
+        String resolvedImageUrl = firstNonBlank(
+                dto.getImageUrl(),
+                dto.getBannerUrl(),
+                event.getImageUrl(),
+                event.getBannerUrl()
+        );
         event.setImageUrl(resolvedImageUrl);
         event.setBannerUrl(resolvedImageUrl);
         event.setSeatLayoutJson(writeSeatLayout(dto.getSeatLayout()));
@@ -572,6 +573,10 @@ public class EventService {
         dto.setVenue(mapVenueToDTO(event.getVenue()));
         dto.setMinPrice(resolveSummaryMinPrice(event, eventPriceTiers, seats));
         dto.setSoldOut(isEventSoldOut(seats));
+        dto.setTotalSeats(seats.size());
+        dto.setAvailableSeats(countByStatus(seats, "AVAILABLE"));
+        dto.setLockedSeats(countByStatus(seats, "LOCKED", "WAITING", "HELD", "RESERVED"));
+        dto.setSoldSeats(countByStatus(seats, "BOOKED", "SOLD", "UNAVAILABLE"));
         return dto;
     }
 

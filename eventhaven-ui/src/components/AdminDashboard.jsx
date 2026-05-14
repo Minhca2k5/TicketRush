@@ -149,17 +149,7 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-[#f4f7fb] font-sans text-slate-900">
       <div className="grid min-h-screen lg:grid-cols-[300px_minmax(0,1fr)]">
-        <aside className="border-r border-[#dde6f0] bg-white">
-          <div className="flex items-center gap-4 border-b border-[#e8edf4] px-8 py-7">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-b from-violet-500 to-indigo-600 text-white shadow-lg shadow-violet-500/25">
-              <Ticket size={18} />
-            </div>
-            <div>
-              <p className="text-lg font-black text-slate-950">TicketRush</p>
-              <p className="text-sm text-slate-500">Admin Portal</p>
-            </div>
-          </div>
-
+        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] self-start flex-col overflow-y-auto border-r border-[#dde6f0] bg-white lg:flex">
           <div className="px-5 py-7">
             <p className="px-4 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Main</p>
             <div className="mt-4 space-y-2">

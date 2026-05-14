@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import AdminSeatMapPreview from './admin/AdminSeatMapPreview';
 import SeatMapRenderer from './seat-map/SeatMapRenderer';
+import { getAdminEventStatus } from '../lib/event-status';
 
 const fallbackEvent = {
   id: 1,
@@ -36,19 +37,10 @@ function formatDateTime(value) {
 }
 
 function statusClass(status) {
-  const normalized = String(status || '').trim().toUpperCase();
-  if (normalized === 'LIVE') return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
-  if (normalized === 'PENDING') return 'bg-amber-50 text-amber-700 ring-amber-200';
-  if (normalized === 'PAST') return 'bg-slate-100 text-slate-500 ring-slate-200';
+  if (status === 'Live') return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
+  if (status === 'Pending') return 'bg-amber-50 text-amber-700 ring-amber-200';
+  if (status === 'Past') return 'bg-slate-100 text-slate-500 ring-slate-200';
   return 'bg-slate-100 text-slate-600 ring-slate-200';
-}
-
-function statusLabel(status) {
-  const normalized = String(status || '').trim().toUpperCase();
-  if (normalized === 'LIVE') return 'Live';
-  if (normalized === 'PENDING') return 'Pending';
-  if (normalized === 'PAST') return 'Past';
-  return 'Draft';
 }
 
 export default function AdminEventDetail() {
@@ -95,6 +87,7 @@ export default function AdminEventDetail() {
   }, [event]);
 
   const hasCoordinateLayout = event?.seatLayout?.zones?.length > 0;
+  const eventStatus = getAdminEventStatus(event);
 
   if (loading) {
     return <div className="px-8 py-16 text-sm text-slate-500">Loading event details...</div>;
@@ -118,8 +111,8 @@ export default function AdminEventDetail() {
       <section className="mt-6 overflow-hidden rounded-[32px] border border-[#dfe7f2] bg-white shadow-[0_16px_48px_rgba(15,23,42,0.06)]">
         <div className="grid gap-0 xl:grid-cols-[1.05fr_0.95fr]">
           <div className="p-8 lg:p-10">
-            <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ring-1 ${statusClass(event.status)}`}>
-              {statusLabel(event.status)}
+            <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ring-1 ${statusClass(eventStatus)}`}>
+              {eventStatus}
             </span>
             <h1 className="mt-5 text-4xl font-black tracking-tight text-slate-950">{event.name}</h1>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-500">

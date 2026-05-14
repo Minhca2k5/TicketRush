@@ -9,6 +9,8 @@ import AdminDashboard from './components/AdminDashboard';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import Profile from './components/Profile';
 import TicketSalesPage from './pages/admin/TicketSalesPage';
+import SystemReportsPage from './pages/admin/SystemReportsPage';
+import AdminSettingsPage from './pages/admin/AdminSettingsPage';
 import OrderHistory from './pages/OrderHistory';
 import AdminUtilityPage from './pages/admin/AdminUtilityPage';
 import AllEventsPage from './pages/AllEventsPage';
@@ -82,7 +84,7 @@ export function AppRoutes() {
         path="/admin/reports"
         element={
           <ProtectedRoute requiredRole="ADMIN">
-            <AdminUtilityPage type="reports" />
+            <SystemReportsPage />
           </ProtectedRoute>
         }
       />
@@ -90,7 +92,7 @@ export function AppRoutes() {
         path="/admin/settings"
         element={
           <ProtectedRoute requiredRole="ADMIN">
-            <AdminUtilityPage type="settings" />
+            <AdminSettingsPage />
           </ProtectedRoute>
         }
       />

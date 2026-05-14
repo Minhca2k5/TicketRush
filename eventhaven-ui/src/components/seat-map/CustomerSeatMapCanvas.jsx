@@ -4,18 +4,19 @@ import { Group, Layer, Line, Rect, Stage, Text } from 'react-konva';
 const DESIGN_WIDTH = 980;
 const DESIGN_HEIGHT = 760;
 const SEAT_SIZE = 24;
-const ZONE_INSET_X = 86;
-const ZONE_INSET_TOP = 62;
-const ZONE_INSET_BOTTOM = 42;
+const ZONE_INSET_LEFT = 56;
+const ZONE_INSET_RIGHT = 32;
+const ZONE_INSET_TOP = 34;
+const ZONE_INSET_BOTTOM = 34;
 const STAGE_TO_ZONE_GAP = 100;
 const ZONE_TO_ZONE_GAP = 60;
-const ZONE_LABEL_HEIGHT = 34;
 const ZONE_LABEL_SAFE_PADDING = 8;
-const ZONE_TITLE_SPACE = 18;
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 3;
 const ZOOM_DELTA_NORMALIZER = 1400;
 const ZOOM_LERP = 0.22;
+const ROW_LABEL_SCREEN_GAP = 34;
+const ZONE_TOOLTIP_HEIGHT = 34;
 
 const statusColor = {
   AVAILABLE: { fill: '#ffffff', stroke: '#c4b5fd', text: '#6d28d9' },
@@ -29,6 +30,10 @@ const statusColor = {
 
 function normalizeStatus(value) {
   return String(value || 'AVAILABLE').trim().toUpperCase();
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
 }
 
 function liveSeatKey(zoneName, seatNumber) {
@@ -52,12 +57,7 @@ function screenVectorToZoneLocal(point, zoneRotation) {
 }
 
 function getRotatedZoneClientRect(bounds, rotation) {
-  const corners = [
-    { x: bounds.minX, y: bounds.minY },
-    { x: bounds.maxX, y: bounds.minY },
-    { x: bounds.maxX, y: bounds.maxY },
-    { x: bounds.minX, y: bounds.maxY },
-  ].map((corner) => rotatePoint(corner, rotation));
+  const corners = getRotatedBoundsCorners(bounds, rotation);
 
   const xs = corners.map((corner) => corner.x);
   const ys = corners.map((corner) => corner.y);
@@ -69,36 +69,88 @@ function getRotatedZoneClientRect(bounds, rotation) {
   };
 }
 
-function getSmartZoneLabelPosition(bounds, rotation, labelHeight = ZONE_LABEL_HEIGHT) {
-  const clientRect = getRotatedZoneClientRect(bounds, rotation);
-  const screenTopCenter = {
-    x: clientRect.x + clientRect.width / 2,
-    y: clientRect.y + ZONE_LABEL_SAFE_PADDING + labelHeight / 2,
+function getRotatedBoundsCorners(bounds, rotation) {
+  return [
+    { x: bounds.minX, y: bounds.minY },
+    { x: bounds.maxX, y: bounds.minY },
+    { x: bounds.maxX, y: bounds.maxY },
+    { x: bounds.minX, y: bounds.maxY },
+  ].map((corner) => rotatePoint(corner, rotation));
+}
+
+function getHorizontalSpanAtY(corners, y) {
+  const intersections = [];
+
+  corners.forEach((start, index) => {
+    const end = corners[(index + 1) % corners.length];
+    const minY = Math.min(start.y, end.y);
+    const maxY = Math.max(start.y, end.y);
+    if (start.y === end.y || y < minY || y >= maxY) return;
+
+    const progress = (y - start.y) / (end.y - start.y);
+    intersections.push(start.x + progress * (end.x - start.x));
+  });
+
+  if (intersections.length < 2) return null;
+  intersections.sort((first, second) => first - second);
+  return {
+    minX: intersections[0],
+    maxX: intersections[intersections.length - 1],
   };
-
-  return screenVectorToZoneLocal(screenTopCenter, rotation);
 }
 
-function getScreenTopLocalSide(rotation) {
-  const localTopVector = screenVectorToZoneLocal({ x: 0, y: -1 }, rotation);
-  if (Math.abs(localTopVector.x) > Math.abs(localTopVector.y)) {
-    return localTopVector.x < 0 ? 'minX' : 'maxX';
-  }
-  return localTopVector.y < 0 ? 'minY' : 'maxY';
+function getSafeHorizontalSpan(corners, y, labelHeight, padding = ZONE_LABEL_SAFE_PADDING) {
+  const sampleYs = [y - labelHeight / 2, y, y + labelHeight / 2];
+  const spans = sampleYs.map((sampleY) => getHorizontalSpanAtY(corners, sampleY)).filter(Boolean);
+  if (spans.length !== sampleYs.length) return null;
+
+  const minX = Math.max(...spans.map((span) => span.minX)) + padding;
+  const maxX = Math.min(...spans.map((span) => span.maxX)) - padding;
+  return maxX > minX ? { minX, maxX, width: maxX - minX } : null;
 }
 
-function getScreenLeftLocalSide(rotation) {
-  const localLeftVector = screenVectorToZoneLocal({ x: -1, y: 0 }, rotation);
-  if (Math.abs(localLeftVector.x) > Math.abs(localLeftVector.y)) {
-    return localLeftVector.x < 0 ? 'minX' : 'maxX';
+function clampScreenAlignedPointInsideBounds(point, bounds, rotation, labelWidth, labelHeight) {
+  const corners = getRotatedBoundsCorners(bounds, rotation);
+  const clientRect = getRotatedZoneClientRect(bounds, rotation);
+  const minY = clientRect.y + ZONE_LABEL_SAFE_PADDING + labelHeight / 2;
+  const maxY = clientRect.y + clientRect.height - ZONE_LABEL_SAFE_PADDING - labelHeight / 2;
+  const screenPoint = rotatePoint(point, rotation);
+  let clampedY = Math.min(Math.max(screenPoint.y, minY), maxY);
+  let span = getSafeHorizontalSpan(corners, clampedY, labelHeight);
+
+  if (!span || span.width < labelWidth) {
+    let best = null;
+    for (let y = minY; y <= maxY; y += 2) {
+      const candidate = getSafeHorizontalSpan(corners, y, labelHeight);
+      if (!candidate) continue;
+      const distance = Math.abs(y - screenPoint.y);
+      if (!best || candidate.width > best.span.width || (candidate.width === best.span.width && distance < best.distance)) {
+        best = { y, span: candidate, distance };
+      }
+    }
+    if (best) {
+      clampedY = best.y;
+      span = best.span;
+    }
   }
-  return localLeftVector.y < 0 ? 'minY' : 'maxY';
+
+  if (!span) return point;
+
+  const halfWidth = Math.min(labelWidth, span.width) / 2;
+  const clampedX = Math.min(Math.max(screenPoint.x, span.minX + halfWidth), span.maxX - halfWidth);
+  return screenVectorToZoneLocal({ x: clampedX, y: clampedY }, rotation);
 }
 
 function getRowLabelPosition(row, rotation) {
+  if (Number.isFinite(Number(row.labelX)) && Number.isFinite(Number(row.labelY))) {
+    return {
+      x: Number(row.labelX),
+      y: Number(row.labelY),
+    };
+  }
+
   const pointOnScreen = rotatePoint({ x: row.x, y: row.y }, rotation);
-  const normalizedRotation = ((Number(rotation || 0) % 360) + 360) % 360;
-  const isSideways = Math.abs(normalizedRotation - 90) < 8 || Math.abs(normalizedRotation - 270) < 8;
+  const isSideways = isSidewaysRotation(rotation);
   const labelPointOnScreen = {
     x: pointOnScreen.x - (isSideways ? 0 : 34),
     y: pointOnScreen.y - (isSideways ? 28 : 0),
@@ -107,27 +159,19 @@ function getRowLabelPosition(row, rotation) {
   return screenVectorToZoneLocal(labelPointOnScreen, rotation);
 }
 
-function expandBoundsForZoneTitle(bounds, rotation) {
-  const nextBounds = { ...bounds };
-  const side = getScreenTopLocalSide(rotation);
-  const titleSpace = ZONE_TITLE_SPACE + ZONE_LABEL_SAFE_PADDING + ZONE_LABEL_HEIGHT;
-
-  if (side === 'minX') nextBounds.minX -= titleSpace;
-  if (side === 'maxX') nextBounds.maxX += titleSpace;
-  if (side === 'minY') nextBounds.minY -= titleSpace;
-  if (side === 'maxY') nextBounds.maxY += titleSpace;
-
-  return {
-    ...nextBounds,
-    width: nextBounds.maxX - nextBounds.minX,
-    height: nextBounds.maxY - nextBounds.minY,
-  };
-}
-
 function seatNumberLabel(seatNumber) {
   const value = String(seatNumber || '');
   const match = value.match(/(\d+)$/);
   return match ? match[1] : value || '?';
+}
+
+function getNormalizedRotation(rotation) {
+  return ((Number(rotation || 0) % 360) + 360) % 360;
+}
+
+function isSidewaysRotation(rotation) {
+  const normalizedRotation = getNormalizedRotation(rotation);
+  return Math.abs(normalizedRotation - 90) < 8 || Math.abs(normalizedRotation - 270) < 8;
 }
 
 function layoutSeatPoint(seat) {
@@ -150,12 +194,15 @@ function getRenderableSeats(zone) {
   const sourceSeats = Array.isArray(zone.seats) ? zone.seats : [];
   if (sourceSeats.length && sourceSeats.every(hasStoredLocalSeatPosition)) {
     return sourceSeats.map((seat, index) => {
-      const rowName = seat.rowName || String(seat.seatNumber || '').replace(/\d+$/, '') || rowNameFrom(0, zone.rowLabel);
+      const seatsPerRow = Math.max(Number(zone.seatsPerRow || 1), 1);
+      const inferredRowIndex = Math.floor(index / seatsPerRow);
+      const rowNameFromSeatNumber = String(seat.seatNumber || '').replace(/\d+$/, '');
+      const rowName = seat.rowName || rowNameFromSeatNumber || rowNameFrom(inferredRowIndex, zone.rowLabel);
       return {
         ...seat,
         id: seat.id || `${zone.id}-${index}`,
         rowName,
-        seatNumber: seat.seatNumber || `${rowName}${index + 1}`,
+        seatNumber: seat.seatNumber || `${rowName}${(index % seatsPerRow) + 1}`,
         localX: Number(seat.localX),
         localY: Number(seat.localY),
       };
@@ -204,8 +251,8 @@ function getZoneBounds(zone) {
     return { minX: -90, maxX: 90, minY: -60, maxY: 60, width: 180, height: 120 };
   }
 
-  const minX = Math.min(...points.map((point) => point.x)) - ZONE_INSET_X;
-  const maxX = Math.max(...points.map((point) => point.x)) + 42;
+  const minX = Math.min(...points.map((point) => point.x)) - ZONE_INSET_LEFT;
+  const maxX = Math.max(...points.map((point) => point.x)) + ZONE_INSET_RIGHT;
   const minY = Math.min(...points.map((point) => point.y)) - ZONE_INSET_TOP;
   const maxY = Math.max(...points.map((point) => point.y)) + ZONE_INSET_BOTTOM;
   return {
@@ -251,6 +298,24 @@ function getAbsoluteRatioCenter(entity) {
   };
 }
 
+function hasExplicitRatioCenter(entity = {}) {
+  const absoluteX = entity?.absoluteCenter?.x;
+  const absoluteY = entity?.absoluteCenter?.y;
+  if (Number.isFinite(Number(absoluteX)) && Number.isFinite(Number(absoluteY))) {
+    return true;
+  }
+
+  const directX = entity?.x;
+  const directY = entity?.y;
+  if (Number.isFinite(Number(directX)) && Number.isFinite(Number(directY))) {
+    return true;
+  }
+
+  const centeredX = entity?.pos_x ?? entity?.posX ?? entity?.center?.x;
+  const centeredY = entity?.pos_y ?? entity?.posY ?? entity?.center?.y;
+  return Number.isFinite(Number(centeredX)) && Number.isFinite(Number(centeredY));
+}
+
 function getZoneCenter(zone) {
   const center = getAbsoluteRatioCenter(zone);
   return {
@@ -267,9 +332,55 @@ function getElementCenter(element) {
   };
 }
 
-function getRowLabels(zone) {
+function getRowLabels(zone, rotation = 0) {
+  const renderableSeats = getRenderableSeats(zone);
+
+  if (isSidewaysRotation(rotation)) {
+    const seatOneAnchors = renderableSeats
+      .filter((seat) => Number(seatNumberLabel(seat.seatNumber)) === 1)
+      .map((seat) => {
+        const point = layoutSeatPoint(seat);
+        const screenPoint = rotatePoint(point, rotation);
+        return {
+          rowName: seat.rowName,
+          point,
+          screenPoint,
+        };
+      })
+      .sort((first, second) => first.screenPoint.x - second.screenPoint.x);
+
+    if (seatOneAnchors.length) {
+      return seatOneAnchors.map((anchor, index) => {
+        const nextSeatInRow = renderableSeats.find((seat) => {
+          const rowName = seat.rowName || String(seat.seatNumber || '').replace(/\d+$/, '');
+          return rowName === anchor.rowName && Number(seatNumberLabel(seat.seatNumber)) === 2;
+        });
+        const nextSeatScreenPoint = nextSeatInRow
+          ? rotatePoint(layoutSeatPoint(nextSeatInRow), rotation)
+          : null;
+        const directionToNextSeat = nextSeatScreenPoint
+          ? Math.sign(nextSeatScreenPoint.y - anchor.screenPoint.y)
+          : -1;
+        const labelDirection = directionToNextSeat === 0 ? -1 : -directionToNextSeat;
+        const labelPoint = screenVectorToZoneLocal(
+          {
+            x: anchor.screenPoint.x,
+            y: anchor.screenPoint.y + labelDirection * ROW_LABEL_SCREEN_GAP,
+          },
+          rotation,
+        );
+
+        return {
+          rowName: anchor.rowName || rowNameFrom(index, zone.rowLabel),
+          labelX: labelPoint.x,
+          labelY: labelPoint.y,
+        };
+      });
+    }
+  }
+
   const rows = new Map();
-  getRenderableSeats(zone).forEach((seat) => {
+  renderableSeats.forEach((seat) => {
     const rowName = seat.rowName || String(seat.seatNumber || '').replace(/\d+$/, '') || '';
     if (!rowName) return;
     const point = layoutSeatPoint(seat);
@@ -306,7 +417,7 @@ function getObjectSize(object, fallback = { width: 160, height: 80 }) {
     };
   }
 
-  const bounds = expandBoundsForZoneTitle(getZoneBounds(object), Number(object.rotation || 0));
+  const bounds = getZoneBounds(object);
   return {
     width: bounds.width,
     height: bounds.height,
@@ -476,7 +587,7 @@ function getLayoutBounds(zones, staticElements, stageRef, normalizedPositionLook
 
   zones.forEach((zone) => {
     const { x: centerX, y: centerY } = getNormalizedPosition(zone, stageRef, normalizedPositionLookup);
-    const zoneBounds = expandBoundsForZoneTitle(getZoneBounds(zone), Number(zone.rotation || 0));
+    const zoneBounds = getZoneBounds(zone);
     bounds = expandBounds(bounds, {
       minX: centerX + zoneBounds.minX,
       maxX: centerX + zoneBounds.maxX,
@@ -516,7 +627,10 @@ export default function CustomerSeatMapCanvas({
   const suppressSeatClickRef = useRef(false);
   const [stageWidth, setStageWidth] = useState(900);
   const [zoom, setZoom] = useState(0.9);
+  const [isEditingZoom, setIsEditingZoom] = useState(false);
+  const [zoomInput, setZoomInput] = useState('');
   const [pan, setPan] = useState({ x: 20, y: 20 });
+  const [zoneTooltip, setZoneTooltip] = useState(null);
 
   useEffect(() => {
     const observer = new ResizeObserver(([entry]) => {
@@ -569,9 +683,13 @@ export default function CustomerSeatMapCanvas({
       ? layout.static_elements
       : [];
   const stageRef = useMemo(() => staticElements.find(isStageElement), [staticElements]);
+  const shouldPreserveSavedPositions = useMemo(
+    () => Boolean(layout?.coordinateSystem) || zones.some(hasExplicitRatioCenter),
+    [layout?.coordinateSystem, zones],
+  );
   const normalizedPositionLookup = useMemo(
-    () => buildNormalizedZonePositions(zones, stageRef),
-    [stageRef, zones],
+    () => (shouldPreserveSavedPositions ? new Map() : buildNormalizedZonePositions(zones, stageRef)),
+    [shouldPreserveSavedPositions, stageRef, zones],
   );
 
   useEffect(() => {
@@ -657,6 +775,58 @@ export default function CustomerSeatMapCanvas({
     }
   };
 
+  const applyZoomPercent = (value) => {
+    const numeric = Number(String(value).replace('%', '').trim());
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      setIsEditingZoom(false);
+      return;
+    }
+
+    const nextZoom = Math.min(Math.max(numeric / 100, MIN_ZOOM), MAX_ZOOM);
+    const oldScale = baseScale * zoomRef.current;
+    const nextScale = baseScale * nextZoom;
+    const viewportCenter = {
+      x: stageWidth / 2,
+      y: stageHeight / 2,
+    };
+    const contentCenter = {
+      x: (viewportCenter.x - panRef.current.x) / oldScale,
+      y: (viewportCenter.y - panRef.current.y) / oldScale,
+    };
+    const nextPan = {
+      x: viewportCenter.x - contentCenter.x * nextScale,
+      y: viewportCenter.y - contentCenter.y * nextScale,
+    };
+
+    if (zoomAnimationRef.current) {
+      window.cancelAnimationFrame(zoomAnimationRef.current);
+      zoomAnimationRef.current = null;
+    }
+
+    zoomRef.current = nextZoom;
+    panRef.current = nextPan;
+    zoomTargetRef.current = { zoom: nextZoom, pan: nextPan };
+    setZoom(nextZoom);
+    setPan(nextPan);
+    setIsEditingZoom(false);
+  };
+
+  const startEditingZoom = () => {
+    setZoomInput(String(Math.round(zoomRef.current * 100)));
+    setIsEditingZoom(true);
+  };
+
+  const handleZoomInputKeyDown = (event) => {
+    if (event.key === 'Enter') {
+      applyZoomPercent(zoomInput);
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      setIsEditingZoom(false);
+    }
+  };
+
   const setCanvasCursor = (cursor) => {
     const stage = containerRef.current?.querySelector('canvas');
     if (stage) stage.style.cursor = cursor;
@@ -664,6 +834,7 @@ export default function CustomerSeatMapCanvas({
 
   const handleMouseDown = (event) => {
     if (event.evt.button != null && event.evt.button !== 0) return;
+    setZoneTooltip(null);
     const stage = event.target.getStage();
     const pointer = stage?.getPointerPosition();
     if (!pointer) return;
@@ -725,11 +896,47 @@ export default function CustomerSeatMapCanvas({
     onToggleSeat(seat, zone, tier);
   };
 
+  const updateZoneTooltip = (event, zone, zonePrice) => {
+    const pointer = event.target.getStage()?.getPointerPosition();
+    if (!pointer) return;
+
+    const text = `${zone.name || 'Untitled Zone'}  $${zonePrice.toLocaleString()}`;
+    const width = clamp(text.length * 7.5 + 28, 150, 320);
+    setZoneTooltip({
+      text,
+      width,
+      x: clamp(pointer.x + 16, 8, stageWidth - width - 8),
+      y: clamp(pointer.y + 16, 8, stageHeight - ZONE_TOOLTIP_HEIGHT - 8),
+    });
+  };
+
   return (
     <div ref={containerRef} className="h-full w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-[0_24px_80px_rgba(15,23,42,0.18)]">
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 text-xs font-bold text-slate-300">
         <span>Scroll to zoom - drag empty space to pan</span>
-        <span>{Math.round(zoom * 100)}%</span>
+        {isEditingZoom ? (
+          <div className="flex items-center gap-1">
+            <input
+              autoFocus
+              value={zoomInput}
+              onChange={(event) => setZoomInput(event.target.value)}
+              onBlur={() => applyZoomPercent(zoomInput)}
+              onKeyDown={handleZoomInputKeyDown}
+              className="h-6 w-14 rounded-md border border-violet-400 bg-slate-900 px-2 text-right text-xs font-bold text-white outline-none focus:ring-2 focus:ring-violet-500"
+              inputMode="numeric"
+            />
+            <span>%</span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={startEditingZoom}
+            className="rounded-md px-2 py-1 text-xs font-bold text-slate-200 transition hover:bg-white/10 hover:text-white"
+            title="Click to set zoom percentage"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+        )}
       </div>
       <Stage
         width={stageWidth}
@@ -740,7 +947,10 @@ export default function CustomerSeatMapCanvas({
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        onMouseLeave={() => {
+          handleMouseUp();
+          setZoneTooltip(null);
+        }}
       >
         <Layer x={pan.x} y={pan.y} scaleX={baseScale * zoom} scaleY={baseScale * zoom}>
           <Rect name="seat-map-background" width={DESIGN_WIDTH} height={DESIGN_HEIGHT} fill="#020617" />
@@ -749,14 +959,11 @@ export default function CustomerSeatMapCanvas({
 
           {zones.map((zone) => {
             const seatBounds = getZoneBounds(zone);
-            const rowLabels = getRowLabels(zone);
             const zonePrice = Number(zone.price || 0);
             const renderableSeats = getRenderableSeats(zone);
             const zoneRotation = Number(zone.rotation || 0);
-            const bounds = expandBoundsForZoneTitle(seatBounds, zoneRotation);
-            const labelClientRect = getRotatedZoneClientRect(bounds, zoneRotation);
-            const labelWidth = Math.max(180, Math.min(labelClientRect.width - 48, 340));
-            const labelPosition = getSmartZoneLabelPosition(bounds, zoneRotation);
+            const rowLabels = getRowLabels(zone, zoneRotation);
+            const bounds = seatBounds;
             const zoneCenter = getNormalizedPosition(zone, stageRef, normalizedPositionLookup);
 
             return (
@@ -765,6 +972,9 @@ export default function CustomerSeatMapCanvas({
                 x={zoneCenter.x}
                 y={zoneCenter.y}
                 rotation={zoneRotation}
+                onMouseEnter={(event) => updateZoneTooltip(event, zone, zonePrice)}
+                onMouseMove={(event) => updateZoneTooltip(event, zone, zonePrice)}
+                onMouseLeave={() => setZoneTooltip(null)}
               >
                 <Rect
                   name="seat-map-pan-surface"
@@ -779,55 +989,6 @@ export default function CustomerSeatMapCanvas({
                   strokeWidth={1.5}
                   dash={[8, 8]}
                 />
-                <Group x={labelPosition.x} y={labelPosition.y} rotation={-zoneRotation} listening={false}>
-                  <Rect
-                    x={-labelWidth / 2}
-                    y={-ZONE_LABEL_HEIGHT / 2}
-                    width={labelWidth}
-                    height={ZONE_LABEL_HEIGHT}
-                    cornerRadius={12}
-                    fill="#1e1b4b"
-                    opacity={0.82}
-                    stroke="#a78bfa"
-                    strokeWidth={1}
-                  />
-                  <Text
-                    x={-labelWidth / 2 + 12}
-                    y={-8}
-                    width={labelWidth - 24}
-                    align="center"
-                    text={`${zone.name}  $${zonePrice.toLocaleString()}`}
-                    fill="#ede9fe"
-                    fontStyle="bold"
-                    fontSize={12}
-                    ellipsis
-                  />
-                </Group>
-
-                {rowLabels.map((row) => {
-                  const rowLabelPosition = getRowLabelPosition(row, zoneRotation);
-
-                  return (
-                    <Group
-                      key={`${zone.id}-row-${row.rowName}`}
-                      x={rowLabelPosition.x}
-                      y={rowLabelPosition.y}
-                      rotation={-zoneRotation}
-                      listening={false}
-                    >
-                      <Text
-                        x={-12}
-                        y={-8}
-                        width={24}
-                        align="center"
-                        text={row.rowName}
-                        fill="#cbd5e1"
-                        fontStyle="bold"
-                        fontSize={13}
-                      />
-                    </Group>
-                  );
-                })}
 
                 {renderableSeats.map((layoutSeat) => {
                   const liveSeat = liveLookup.byId.get(String(layoutSeat.id))
@@ -885,6 +1046,37 @@ export default function CustomerSeatMapCanvas({
                     </Group>
                   );
                 })}
+
+                {rowLabels.map((row) => {
+                  const rowLabelPosition = clampScreenAlignedPointInsideBounds(
+                    getRowLabelPosition(row, zoneRotation),
+                    seatBounds,
+                    zoneRotation,
+                    24,
+                    16,
+                  );
+
+                  return (
+                    <Group
+                      key={`${zone.id}-row-${row.rowName}`}
+                      x={rowLabelPosition.x}
+                      y={rowLabelPosition.y}
+                      rotation={-zoneRotation}
+                      listening={false}
+                    >
+                      <Text
+                        x={-12}
+                        y={-8}
+                        width={24}
+                        align="center"
+                        text={row.rowName}
+                        fill="#cbd5e1"
+                        fontStyle="bold"
+                        fontSize={13}
+                      />
+                    </Group>
+                  );
+                })}
               </Group>
             );
           })}
@@ -925,6 +1117,36 @@ export default function CustomerSeatMapCanvas({
             );
           })}
         </Layer>
+
+        {zoneTooltip ? (
+          <Layer listening={false}>
+            <Group x={zoneTooltip.x} y={zoneTooltip.y}>
+              <Rect
+                width={zoneTooltip.width}
+                height={ZONE_TOOLTIP_HEIGHT}
+                cornerRadius={12}
+                fill="#1e1b4b"
+                opacity={0.94}
+                stroke="#a78bfa"
+                strokeWidth={1}
+                shadowColor="#000000"
+                shadowBlur={14}
+                shadowOpacity={0.28}
+              />
+              <Text
+                x={14}
+                y={10}
+                width={zoneTooltip.width - 28}
+                align="center"
+                text={zoneTooltip.text}
+                fill="#ede9fe"
+                fontStyle="bold"
+                fontSize={12}
+                ellipsis
+              />
+            </Group>
+          </Layer>
+        ) : null}
       </Stage>
     </div>
   );

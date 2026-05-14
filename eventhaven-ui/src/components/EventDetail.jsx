@@ -4,6 +4,7 @@ import { SeatSelector } from './SeatSelector';
 import { WaitingRoom } from './WaitingRoom';
 import { mapSeatLayoutToType, mapSeatsToType } from '@/lib/seat-types';
 import { getEventById, getSeatLayout, getSeatMap } from '../services/eventService';
+import { isEventPast } from '../lib/event-status';
 
 export default function EventDetail() {
   const { id } = useParams();
@@ -75,6 +76,19 @@ export default function EventDetail() {
 
   if (!event) {
     return <div className="px-4 py-20 text-center text-red-500">Unable to load event.</div>;
+  }
+
+  if (isEventPast(event)) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-20 text-center">
+        <div className="rounded-[28px] border border-slate-200 bg-white p-8 shadow-sm">
+          <h1 className="text-2xl font-black text-slate-950">Sự kiện đã qua</h1>
+          <p className="mt-3 text-sm leading-6 text-slate-500">
+            Sự kiện này đã hết thời gian diễn ra nên không còn mở đặt vé.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   if (!isAdmitted) {

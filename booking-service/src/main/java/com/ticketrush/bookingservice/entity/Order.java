@@ -16,6 +16,9 @@ public class Order {
     @Column(name = "user_id", nullable = false)
     private String userId;
 
+    @Column(name = "event_id")
+    private Long eventId;
+
     @Column(name = "total_price", nullable = false)
     private BigDecimal totalPrice;
 

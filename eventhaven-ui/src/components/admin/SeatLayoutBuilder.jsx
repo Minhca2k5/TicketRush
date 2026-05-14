@@ -1,29 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Group, Layer, Line, Rect, Stage, Text, Transformer } from 'react-konva';
-import { Copy, LocateFixed, MousePointer2, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
+import { LocateFixed, MousePointer2, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
 
 const DESIGN_WIDTH = 980;
 const DESIGN_HEIGHT = 760;
 const SEAT_RADIUS = 6;
-const ZONE_LABEL_HEIGHT = 26;
-const ZONE_LABEL_SAFE_PADDING = 8;
-const ZONE_TITLE_SPACE = 18;
+const ZONE_TOOLTIP_HEIGHT = 34;
 
 const staticElementOptions = [
   { type: 'stage', label: 'STAGE', width: 220, height: 64, fill: '#312e81', stroke: '#a78bfa' },
-  { type: 'field', label: 'FIELD', width: 260, height: 120, fill: '#14532d', stroke: '#22c55e' },
   { type: 'exit', label: 'EXIT', width: 92, height: 44, fill: '#7f1d1d', stroke: '#fca5a5' },
 ];
 
 const defaultStaticElements = [
   { id: 'static-stage', type: 'stage', label: 'STAGE', x: 0.5, y: 0.14, width: 220, height: 64, rotation: 0 },
-  { id: 'static-field', type: 'field', label: 'FIELD', x: 0.5, y: 0.5, width: 260, height: 120, rotation: 0 },
 ];
 
 const defaultVenueSettings = {
   name: 'Main Venue Layout',
   canvasMode: 'concert',
-  showJson: true,
 };
 
 const defaultZoneDraft = {
@@ -57,59 +52,6 @@ function rotatePoint(point, degrees) {
 
 function screenVectorToZoneLocal(point, zoneRotation) {
   return rotatePoint(point, -Number(zoneRotation || 0));
-}
-
-function getRotatedZoneClientRect(bounds, rotation) {
-  const corners = [
-    { x: bounds.minX, y: bounds.minY },
-    { x: bounds.maxX, y: bounds.minY },
-    { x: bounds.maxX, y: bounds.maxY },
-    { x: bounds.minX, y: bounds.maxY },
-  ].map((corner) => rotatePoint(corner, rotation));
-
-  const xs = corners.map((corner) => corner.x);
-  const ys = corners.map((corner) => corner.y);
-  return {
-    x: Math.min(...xs),
-    y: Math.min(...ys),
-    width: Math.max(...xs) - Math.min(...xs),
-    height: Math.max(...ys) - Math.min(...ys),
-  };
-}
-
-function getSmartZoneLabelPosition(bounds, rotation, labelHeight = ZONE_LABEL_HEIGHT) {
-  const clientRect = getRotatedZoneClientRect(bounds, rotation);
-  const screenTopCenter = {
-    x: clientRect.x + clientRect.width / 2,
-    y: clientRect.y + ZONE_LABEL_SAFE_PADDING + labelHeight / 2,
-  };
-
-  return screenVectorToZoneLocal(screenTopCenter, rotation);
-}
-
-function getScreenTopLocalSide(rotation) {
-  const localTopVector = screenVectorToZoneLocal({ x: 0, y: -1 }, rotation);
-  if (Math.abs(localTopVector.x) > Math.abs(localTopVector.y)) {
-    return localTopVector.x < 0 ? 'minX' : 'maxX';
-  }
-  return localTopVector.y < 0 ? 'minY' : 'maxY';
-}
-
-function expandBoundsForZoneTitle(bounds, rotation) {
-  const nextBounds = { ...bounds };
-  const side = getScreenTopLocalSide(rotation);
-  const titleSpace = ZONE_TITLE_SPACE + ZONE_LABEL_SAFE_PADDING + ZONE_LABEL_HEIGHT;
-
-  if (side === 'minX') nextBounds.minX -= titleSpace;
-  if (side === 'maxX') nextBounds.maxX += titleSpace;
-  if (side === 'minY') nextBounds.minY -= titleSpace;
-  if (side === 'maxY') nextBounds.maxY += titleSpace;
-
-  return {
-    ...nextBounds,
-    width: nextBounds.maxX - nextBounds.minX,
-    height: nextBounds.maxY - nextBounds.minY,
-  };
 }
 
 function seatNumberLabel(seatNumber) {
@@ -306,15 +248,15 @@ function getZoneBounds(zone, seats) {
   const xs = seats.map((seat) => seat.x);
   const ys = seats.map((seat) => seat.y);
   return {
-    minX: Math.min(...xs) - 18,
-    maxX: Math.max(...xs) + 18,
-    minY: Math.min(...ys) - 42,
-    maxY: Math.max(...ys) + 18,
+    minX: Math.min(...xs) - 24,
+    maxX: Math.max(...xs) + 24,
+    minY: Math.min(...ys) - 24,
+    maxY: Math.max(...ys) + 24,
   };
 }
 
 function getZoneArea(zone) {
-  const bounds = expandBoundsForZoneTitle(getZoneBounds(zone, buildSeats(zone)), Number(zone.rotation || 0));
+  const bounds = getZoneBounds(zone, buildSeats(zone));
   return (bounds.maxX - bounds.minX) * (bounds.maxY - bounds.minY);
 }
 
@@ -345,6 +287,7 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
   const panStartRef = useRef(null);
   const hydratedEventIdRef = useRef(eventId);
   const zoneRefsRef = useRef(new Map());
+  const staticRefsRef = useRef(new Map());
   const [stageWidth, setStageWidth] = useState(760);
   const [viewportScale, setViewportScale] = useState(() => initialEditorState.viewportScale);
   const [viewportOffset, setViewportOffset] = useState(() => initialEditorState.viewportOffset);
@@ -355,6 +298,7 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
   const [selectedZoneId, setSelectedZoneId] = useState(() => initialEditorState.selectedZoneId);
   const [selectedStaticId, setSelectedStaticId] = useState(() => initialEditorState.selectedStaticId);
   const [draft, setDraft] = useState(() => initialEditorState.draft);
+  const [zoneTooltip, setZoneTooltip] = useState(null);
 
   useEffect(() => {
     const node = containerRef.current;
@@ -471,10 +415,14 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
     const transformer = transformerRef.current;
     if (!transformer) return;
 
-    const selectedNode = selectedZoneId ? zoneRefsRef.current.get(selectedZoneId) : null;
+    const selectedNode = selectedZoneId
+      ? zoneRefsRef.current.get(selectedZoneId)
+      : selectedStaticId
+        ? staticRefsRef.current.get(selectedStaticId)
+        : null;
     transformer.nodes(selectedNode ? [selectedNode] : []);
     transformer.getLayer()?.batchDraw();
-  }, [selectedZoneId, zones]);
+  }, [selectedStaticId, selectedZoneId, zones, staticElements]);
 
   const syncDraft = (zone) => {
     setSelectedZoneId(zone.id);
@@ -583,27 +531,58 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
     )));
   };
 
-  const syncRotationFromTransformer = () => {
-    if (!selectedZoneId) return;
-    const node = zoneRefsRef.current.get(selectedZoneId);
+  const syncTransformFromTransformer = () => {
+    const node = selectedZoneId
+      ? zoneRefsRef.current.get(selectedZoneId)
+      : selectedStaticId
+        ? staticRefsRef.current.get(selectedStaticId)
+        : null;
     if (!node) return;
 
     const rotation = round(((node.rotation() % 360) + 360) % 360);
-    updateSelectedZone({ rotation });
+
+    if (selectedZoneId) {
+      updateSelectedZone({ rotation });
+      return;
+    }
+
+    if (selectedStaticId) {
+      const scaleX = node.scaleX();
+      const scaleY = node.scaleY();
+      const width = Math.max(32, round(Number(selectedStatic?.width || 0) * scaleX));
+      const height = Math.max(24, round(Number(selectedStatic?.height || 0) * scaleY));
+
+      node.scaleX(1);
+      node.scaleY(1);
+
+      setStaticElements((current) => current.map((element) => (
+        element.id === selectedStaticId ? { ...element, rotation, width, height } : element
+      )));
+    }
   };
 
   const addStaticElement = (type) => {
     setStaticElements((current) => [...current, createStaticElement(type)]);
   };
 
-  const copyJson = async () => {
-    await navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-  };
-
   const setCanvasCursor = (value) => {
     if (containerRef.current) {
       containerRef.current.style.cursor = value;
     }
+  };
+
+  const updateZoneTooltip = (event, zone) => {
+    const pointer = event.target.getStage()?.getPointerPosition();
+    if (!pointer) return;
+
+    const text = `${zone.name || 'Untitled Zone'}  $${Number(zone.price || 0).toLocaleString()}`;
+    const width = clamp(text.length * 7.5 + 28, 150, 320);
+    setZoneTooltip({
+      text,
+      width,
+      x: clamp(pointer.x + 16, 8, stageWidth - width - 8),
+      y: clamp(pointer.y + 16, 8, stageHeight - ZONE_TOOLTIP_HEIGHT - 8),
+    });
   };
 
   const isWorkspaceBackgroundTarget = (target) => {
@@ -657,10 +636,7 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
 
     zones.forEach((zone) => {
       const point = denormalize(zone);
-      const boundsForZone = expandBoundsForZoneTitle(
-        getZoneBounds(zone, buildSeats(zone)),
-        Number(zone.rotation || 0),
-      );
+      const boundsForZone = getZoneBounds(zone, buildSeats(zone));
       expand({
         minX: point.x + boundsForZone.minX,
         maxX: point.x + boundsForZone.maxX,
@@ -1009,14 +985,6 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
               </button>
               <button
                 type="button"
-                onClick={copyJson}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 transition hover:border-violet-200 hover:text-violet-600"
-              >
-                <Copy size={15} />
-                Copy JSON
-              </button>
-              <button
-                type="button"
                 onClick={() => onSave?.(payload)}
                 className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-800"
               >
@@ -1032,6 +1000,7 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
               height={stageHeight}
               onWheel={handleWheel}
               onMouseDown={(event) => {
+                setZoneTooltip(null);
                 const isBlank = isWorkspaceBackgroundTarget(event.target);
                 if (isBlank) {
                   clearSelection();
@@ -1070,6 +1039,7 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                 setIsPanning(false);
                 panStartRef.current = null;
                 setCanvasCursor('default');
+                setZoneTooltip(null);
               }}
             >
               <Layer x={viewportOffset.x} y={viewportOffset.y} scaleX={scale * viewportScale} scaleY={scale * viewportScale}>
@@ -1092,6 +1062,13 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                   return (
                     <Group
                       key={element.id}
+                      ref={(node) => {
+                        if (node) {
+                          staticRefsRef.current.set(element.id, node);
+                        } else {
+                          staticRefsRef.current.delete(element.id);
+                        }
+                      }}
                       x={point.x}
                       y={point.y}
                       rotation={elementRotation}
@@ -1156,8 +1133,7 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                   const seats = buildSeats(zone);
                   const isSelected = zone.id === selectedZoneId;
                   const zoneRotation = Number(zone.rotation || 0);
-                  const bounds = expandBoundsForZoneTitle(getZoneBounds(zone, seats), zoneRotation);
-                  const labelPosition = getSmartZoneLabelPosition(bounds, zoneRotation);
+                  const bounds = getZoneBounds(zone, seats);
 
                   return (
                     <Group
@@ -1173,6 +1149,9 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                       y={point.y}
                       rotation={zoneRotation}
                       draggable
+                      onMouseEnter={(event) => updateZoneTooltip(event, zone)}
+                      onMouseMove={(event) => updateZoneTooltip(event, zone)}
+                      onMouseLeave={() => setZoneTooltip(null)}
                       onClick={(event) => {
                         event.cancelBubble = true;
                         syncDraft(zone);
@@ -1207,35 +1186,6 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                           shadowOpacity={0.3}
                         />
                       ) : null}
-
-                      <Group
-                        x={labelPosition.x}
-                        y={labelPosition.y}
-                        rotation={-zoneRotation}
-                        listening={false}
-                      >
-                        <Rect
-                          x={-88}
-                          y={-13}
-                          width={176}
-                          height={ZONE_LABEL_HEIGHT}
-                          cornerRadius={10}
-                          fill={isSelected ? '#6d28d9' : '#1e1b4b'}
-                          opacity={0.86}
-                          stroke="#a78bfa"
-                          strokeWidth={1}
-                        />
-                        <Text
-                          x={-78}
-                          y={-7}
-                          text={`${zone.name}  $${Number(zone.price || 0).toLocaleString()}`}
-                          fill="#ede9fe"
-                          fontStyle="bold"
-                          fontSize={12}
-                          width={156}
-                          align="center"
-                        />
-                      </Group>
 
                       {seats.map((seat) => (
                         <Group
@@ -1295,8 +1245,14 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                 <Transformer
                   ref={transformerRef}
                   rotateEnabled
-                  resizeEnabled={false}
-                  enabledAnchors={[]}
+                  resizeEnabled={Boolean(selectedStaticId)}
+                  enabledAnchors={selectedStaticId ? ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle-left', 'middle-right'] : []}
+                  keepRatio={false}
+                  boundBoxFunc={(oldBox, newBox) => {
+                    if (!selectedStaticId) return oldBox;
+                    if (Math.abs(newBox.width) < 32 || Math.abs(newBox.height) < 24) return oldBox;
+                    return newBox;
+                  }}
                   borderStroke="#a78bfa"
                   borderStrokeWidth={2}
                   borderDash={[8, 6]}
@@ -1306,10 +1262,40 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                   anchorFill="#7c3aed"
                   anchorStroke="#ddd6fe"
                   anchorStrokeWidth={2}
-                  onTransform={syncRotationFromTransformer}
-                  onTransformEnd={syncRotationFromTransformer}
+                  onTransform={syncTransformFromTransformer}
+                  onTransformEnd={syncTransformFromTransformer}
                 />
               </Layer>
+
+              {zoneTooltip ? (
+                <Layer listening={false}>
+                  <Group x={zoneTooltip.x} y={zoneTooltip.y}>
+                    <Rect
+                      width={zoneTooltip.width}
+                      height={ZONE_TOOLTIP_HEIGHT}
+                      cornerRadius={12}
+                      fill="#1e1b4b"
+                      opacity={0.94}
+                      stroke="#a78bfa"
+                      strokeWidth={1}
+                      shadowColor="#000000"
+                      shadowBlur={14}
+                      shadowOpacity={0.28}
+                    />
+                    <Text
+                      x={14}
+                      y={10}
+                      width={zoneTooltip.width - 28}
+                      align="center"
+                      text={zoneTooltip.text}
+                      fill="#ede9fe"
+                      fontStyle="bold"
+                      fontSize={12}
+                      ellipsis
+                    />
+                  </Group>
+                </Layer>
+              ) : null}
             </Stage>
           </div>
 
@@ -1332,11 +1318,6 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
             </div>
           </div>
 
-          {venueSettings.showJson ? (
-            <pre className="max-h-56 overflow-auto rounded-2xl bg-slate-950 p-4 text-xs leading-5 text-slate-100">
-              {JSON.stringify(payload, null, 2)}
-            </pre>
-          ) : null}
         </div>
       </div>
     </section>
