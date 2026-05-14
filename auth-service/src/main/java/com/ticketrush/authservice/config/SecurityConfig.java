@@ -24,6 +24,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(authz -> authz
                 .requestMatchers(
                     "/auth/register",
+                    "/auth/verify-email",
+                    "/auth/resend-verification",
                     "/auth/login",
                     "/auth/profile",
                     "/auth/dashboard",

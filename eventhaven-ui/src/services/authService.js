@@ -23,6 +23,21 @@ export async function getProfile() {
   return response.data?.data || response.data;
 }
 
+export async function registerAccount(payload) {
+  const response = await authApi.post('/auth/register', payload);
+  return response.data?.data || response.data;
+}
+
+export async function verifyEmail(payload) {
+  const response = await authApi.post('/auth/verify-email', payload);
+  return response.data?.data || response.data;
+}
+
+export async function resendVerificationCode(payload) {
+  const response = await authApi.post('/auth/resend-verification', payload);
+  return response.data?.data || response.data;
+}
+
 export async function updateProfile(payload) {
   const response = await authApi.put('/auth/profile', payload);
   return response.data?.data || response.data;

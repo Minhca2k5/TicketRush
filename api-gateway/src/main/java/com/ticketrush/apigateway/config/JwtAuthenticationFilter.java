@@ -75,6 +75,8 @@ public class JwtAuthenticationFilter implements GlobalFilter {
         return HttpMethod.OPTIONS.equals(method)
                 || path.startsWith("/auth/login")
                 || path.startsWith("/auth/register")
+                || path.startsWith("/auth/verify-email")
+                || path.startsWith("/auth/resend-verification")
                 || (HttpMethod.GET.equals(method) && path.startsWith("/api/events"));
     }
 

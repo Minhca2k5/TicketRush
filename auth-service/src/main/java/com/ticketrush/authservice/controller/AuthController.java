@@ -4,7 +4,9 @@ import com.ticketrush.authservice.dto.ApiResponse;
 import com.ticketrush.authservice.dto.AuthDashboardResponse;
 import com.ticketrush.authservice.dto.AuthSettingsResponse;
 import com.ticketrush.authservice.dto.LoginResponse;
+import com.ticketrush.authservice.dto.ResendVerificationRequest;
 import com.ticketrush.authservice.dto.UserResponse;
+import com.ticketrush.authservice.dto.VerifyEmailRequest;
 import com.ticketrush.authservice.exception.AuthServiceException;
 import com.ticketrush.authservice.model.User;
 import com.ticketrush.authservice.service.AuthService;
@@ -29,6 +31,18 @@ public class AuthController {
     public ResponseEntity<ApiResponse<UserResponse>> register(@Valid @RequestBody User user) {
         User savedUser = authService.register(user);
         return ResponseEntity.ok(ApiResponse.success(new UserResponse(savedUser)));
+    }
+
+    @PostMapping("/verify-email")
+    public ResponseEntity<ApiResponse<Void>> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        authService.verifyEmail(request.getEmail(), request.getCode());
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @PostMapping("/resend-verification")
+    public ResponseEntity<ApiResponse<Void>> resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
+        authService.resendVerificationCode(request.getEmail());
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @PostMapping("/login")

@@ -24,7 +24,8 @@ const Login = () => {
     try {
       response = await axios.post(`${API_BASE_URL}/auth/login`, { username, password });
     } catch (error) {
-      setError(error.response?.data?.error || error.message || 'Login failed');
+      const backendMessage = error.response?.data?.error || error.message || 'Login failed';
+      setError(/email not verified/i.test(backendMessage) ? 'Please verify your email before signing in.' : backendMessage);
       setSubmitting(false);
       return;
     }
