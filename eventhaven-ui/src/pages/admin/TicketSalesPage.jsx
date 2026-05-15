@@ -93,6 +93,49 @@ function startOfMonth() {
   return date;
 }
 
+function getDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getDateLabel(date) {
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function eachDayBetween(startDate, endDate) {
+  const days = [];
+  const cursor = new Date(startDate);
+  cursor.setHours(0, 0, 0, 0);
+
+  const end = new Date(endDate);
+  end.setHours(0, 0, 0, 0);
+
+  while (cursor <= end) {
+    days.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return days;
+}
+
+function getTrendDays(selectedFilter) {
+  const today = startOfToday();
+
+  if (selectedFilter === 'today') {
+    return [today];
+  }
+
+  if (selectedFilter === 'month') {
+    return eachDayBetween(startOfMonth(), today);
+  }
+
+  const sevenDaysAgo = new Date(today);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+  return eachDayBetween(sevenDaysAgo, today);
+}
+
 function normalizeOrderStatus(status) {
   const normalized = String(status || '').trim().toUpperCase();
 
@@ -272,14 +315,21 @@ export default function TicketSalesPage() {
       const createdAt = parseBackendDateTime(order.createdAt);
       if (!createdAt) return accumulator;
 
-      const label = createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      accumulator[label] = (accumulator[label] || 0) + (order.status === 'Completed' ? order.amount : 0);
+      const key = getDateKey(createdAt);
+      accumulator[key] = (accumulator[key] || 0) + (order.status === 'Completed' ? order.amount : 0);
       return accumulator;
     }, {});
 
-    const points = Object.entries(grouped).map(([label, value]) => ({ label, value }));
+    const points = getTrendDays(selectedFilter).map((date) => {
+      const key = getDateKey(date);
+      return {
+        label: getDateLabel(date),
+        value: grouped[key] || 0,
+      };
+    });
+
     return points.length ? points : [{ label: 'No data', value: 0 }];
-  }, [filteredOrders]);
+  }, [filteredOrders, selectedFilter]);
 
   const recentOrders = useMemo(() => (
     [...filteredOrders].sort((first, second) => (
