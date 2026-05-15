@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { LogIn, Lock, Mail, Ticket } from 'lucide-react';
 import { getRoleFromToken } from '../lib/auth';
+import { getProfile } from '../services/authService';
+import { getDefaultRoute, readUserSettings } from '../lib/userSettings';
 import './Auth.css';
 
 const API_BASE_URL = import.meta.env.VITE_AUTH_API_BASE_URL || 'http://localhost:8080';
@@ -41,7 +43,15 @@ const Login = () => {
     localStorage.setItem('token', token);
     localStorage.setItem('role', role);
 
-    const fallbackPath = role === 'ADMIN' ? '/admin' : '/';
+    let fallbackPath = role === 'ADMIN' ? '/admin' : '/';
+    if (role !== 'ADMIN') {
+      try {
+        const profile = await getProfile();
+        fallbackPath = getDefaultRoute(readUserSettings(profile).defaultView);
+      } catch {
+        fallbackPath = '/';
+      }
+    }
     navigate(location.state?.from?.pathname || fallbackPath, { replace: true });
   };
 

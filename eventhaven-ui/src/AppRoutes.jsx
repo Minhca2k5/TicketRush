@@ -15,6 +15,7 @@ import AdminSettingsPage from './pages/admin/AdminSettingsPage';
 import OrderHistory from './pages/OrderHistory';
 import AdminUtilityPage from './pages/admin/AdminUtilityPage';
 import AllEventsPage from './pages/AllEventsPage';
+import UserSettingsPage from './pages/UserSettingsPage';
 
 export function AppRoutes() {
   return (
@@ -31,6 +32,14 @@ export function AppRoutes() {
         element={
           <ProtectedRoute>
             <Profile />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <UserSettingsPage />
           </ProtectedRoute>
         }
       />

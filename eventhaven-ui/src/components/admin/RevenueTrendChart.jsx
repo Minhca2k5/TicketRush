@@ -2,6 +2,7 @@ export default function RevenueTrendChart({ data, formatCurrency }) {
   const values = data.map((item) => Number(item.value || 0));
   const peakValue = Math.max(...values, 0);
   const chartPeak = Math.max(peakValue, 1);
+  const hasData = data.some((item) => Number(item.value || 0) > 0);
 
   return (
     <div className="rounded-[28px] border border-[#dfe7f2] bg-white p-6 shadow-[0_12px_36px_rgba(15,23,42,0.05)]">
@@ -16,20 +17,31 @@ export default function RevenueTrendChart({ data, formatCurrency }) {
       </div>
 
       <div className="mt-6">
-        <div className="flex h-[260px] items-end gap-3 overflow-x-auto pb-2">
-          {data.map((point) => (
-            <div key={point.label} className="flex min-w-[72px] flex-1 flex-col items-center gap-3">
-              <span className="text-xs font-semibold text-slate-500">{formatCurrency(point.value)}</span>
-              <div className="flex h-[180px] w-full items-end rounded-[24px] bg-slate-50 px-2 py-2">
-                <div
-                  className="w-full rounded-[18px] bg-gradient-to-t from-violet-600 via-violet-500 to-fuchsia-400 shadow-[0_10px_18px_rgba(139,92,246,0.25)]"
-                  style={{ height: `${point.value > 0 ? Math.max(12, Math.round((point.value / chartPeak) * 100)) : 0}%` }}
-                />
+        {hasData ? (
+          <div className="flex h-[260px] items-end gap-3 overflow-x-auto pb-2">
+            {data.map((point) => (
+              <div key={point.label} className="flex min-w-[72px] flex-1 flex-col items-center gap-3">
+                <span className="text-xs font-semibold text-slate-500">{formatCurrency(point.value)}</span>
+                <div className="flex h-[180px] w-full items-end rounded-[24px] bg-slate-50 px-2 py-2">
+                  <div
+                    className="w-full rounded-[18px] bg-gradient-to-t from-violet-600 via-violet-500 to-fuchsia-400 shadow-[0_10px_18px_rgba(139,92,246,0.25)]"
+                    style={{ height: `${Math.max(12, Math.round((point.value / chartPeak) * 100))}%` }}
+                  />
+                </div>
+                <span className="text-xs font-medium text-slate-500">{point.label}</span>
               </div>
-              <span className="text-xs font-medium text-slate-500">{point.label}</span>
+            ))}
+          </div>
+        ) : (
+          <div className="flex h-[260px] items-center justify-center rounded-[24px] border border-dashed border-slate-200 bg-slate-50/80 px-6 text-center">
+            <div>
+              <p className="text-base font-black text-slate-800">No sales data yet</p>
+              <p className="mt-2 max-w-md text-sm font-medium text-slate-500">
+                Completed ticket orders will appear here as soon as customers finish checkout.
+              </p>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

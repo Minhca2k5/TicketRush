@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Check, RefreshCcw, ShoppingBag, X } from "lucide-react";
 import { mapSeatLayoutToType, mapSeatsToType } from "@/lib/seat-types";
 import { EventHeader } from "./EventHeader";
@@ -9,6 +10,8 @@ import { Legend } from "./Legend";
 import { BookingCart } from "./BookingCart";
 import { getSeatLayout, getSeatMap } from "../services/eventService";
 import { lockSeat, releaseSeat, checkout } from "../services/bookingService";
+import { getProfile } from "../services/authService";
+import { readUserSettings } from "../lib/userSettings";
 import SeatMapRenderer from "./seat-map/SeatMapRenderer";
 
 const HOLD_MINUTES = 10;
@@ -26,6 +29,12 @@ function getOrCreateHolderId() {
   const generated = `holder-${crypto.randomUUID()}`;
   window.localStorage.setItem(HOLDER_STORAGE_KEY, generated);
   return generated;
+}
+
+function getAccountHolderId(profile) {
+  if (profile?.id) return `user-${profile.id}`;
+  if (profile?.username) return `user-${profile.username}`;
+  return null;
 }
 
 function normalizeCanvasSeatStatus(status) {
@@ -105,6 +114,7 @@ function getRestoredTimerStart(selectedSeats, storedExpirationTime) {
 }
 
 export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, initialLayout, initialCoordinateLayout }) {
+  const navigate = useNavigate();
   const [selectedSeats, setSelectedSeats] = useState([]);
   const [timerStart, setTimerStart] = useState(null);
   const [showMobileCart, setShowMobileCart] = useState(false);
@@ -123,6 +133,8 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [checkoutSuccess, setCheckoutSuccess] = useState(false);
   const [showHoldExpiredModal, setShowHoldExpiredModal] = useState(false);
+  const [userSettings, setUserSettings] = useState(null);
+  const [reminderShownFor, setReminderShownFor] = useState(null);
   const [orderId, setOrderId] = useState(null);
   const holderIdRef = useRef(null);
   const selectedSeatsRef = useRef([]);
@@ -153,7 +165,52 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
 
   useEffect(() => {
     holderIdRef.current = getOrCreateHolderId();
+
+    let isActive = true;
+    getProfile()
+      .then((profile) => {
+        if (!isActive) return;
+        setUserSettings(readUserSettings(profile));
+        const accountHolderId = getAccountHolderId(profile);
+        if (!accountHolderId) return;
+
+        holderIdRef.current = accountHolderId;
+        window.localStorage.setItem(HOLDER_STORAGE_KEY, accountHolderId);
+      })
+      .catch(() => {
+        // Keep the anonymous holder fallback so seat selection still works for older sessions.
+      });
+
+    return () => {
+      isActive = false;
+    };
   }, []);
+
+  useEffect(() => {
+    if (!userSettings?.bookingReminders || !timerStart || !selectedSeats.length) {
+      setReminderShownFor(null);
+      return undefined;
+    }
+
+    const reminderMs = Number(userSettings.holdReminderMinutes || 2) * 60 * 1000;
+    const expiresAt = timerStart + HOLD_MINUTES * 60 * 1000;
+    const reminderAt = expiresAt - reminderMs;
+    const key = `${eventId}:${expiresAt}`;
+
+    const showReminder = () => {
+      if (Date.now() >= reminderAt && Date.now() < expiresAt && reminderShownFor !== key) {
+        setReminderShownFor(key);
+        setToast({
+          type: "warning",
+          message: `Your held seats expire in about ${userSettings.holdReminderMinutes} minute(s).`,
+        });
+      }
+    };
+
+    showReminder();
+    const reminderTimer = window.setInterval(showReminder, 10000);
+    return () => window.clearInterval(reminderTimer);
+  }, [eventId, reminderShownFor, selectedSeats.length, timerStart, userSettings]);
 
   useEffect(() => {
     const holderId = holderIdRef.current;
@@ -627,7 +684,10 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
                 </p>
                 <button
                   type="button"
-                  onClick={() => setShowBookingConfirm(false)}
+                  onClick={() => {
+                    setShowBookingConfirm(false);
+                    navigate("/orders");
+                  }}
                   className="mt-6 rounded-full bg-green-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-green-500"
                 >
                   View My Tickets

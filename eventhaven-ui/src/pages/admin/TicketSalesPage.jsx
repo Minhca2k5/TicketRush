@@ -7,7 +7,6 @@ import {
   FileBarChart2,
   LifeBuoy,
   Receipt,
-  RefreshCcw,
   Search,
   Settings,
   ShieldCheck,
@@ -21,6 +20,7 @@ import RevenueTrendChart from '../../components/admin/RevenueTrendChart';
 import SalesStatCard from '../../components/admin/SalesStatCard';
 import SalesTable from '../../components/admin/SalesTable';
 import api from '../../services/api';
+import { getAuthUsers } from '../../services/authService';
 
 const sidebarMain = [
   { label: 'Dashboard', icon: BarChart3, to: '/admin/dashboard' },
@@ -41,6 +41,8 @@ const timeFilters = [
   { key: '7d', label: '7 ngày qua' },
   { key: 'month', label: 'Tháng này' },
 ];
+
+const SALES_REFRESH_INTERVAL_MS = 10000;
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -96,7 +98,7 @@ function normalizeOrderStatus(status) {
 
   if (['PAID', 'COMPLETED', 'SUCCESS', 'CONFIRMED'].includes(normalized)) return 'Completed';
   if (['PENDING', 'HELD', 'PROCESSING'].includes(normalized)) return 'Pending';
-  if (['REFUNDED', 'CANCELLED', 'CANCELED'].includes(normalized)) return 'Refunded';
+  if (['CANCELLED', 'CANCELED'].includes(normalized)) return 'Cancelled';
 
   return normalized ? normalized.charAt(0) + normalized.slice(1).toLowerCase() : 'Pending';
 }
@@ -107,7 +109,19 @@ function getEventList(eventsResponse) {
   return Array.isArray(payload) ? payload : [];
 }
 
-function transformOrder(order, eventsById) {
+function getUserList(usersResponse) {
+  const payload = usersResponse?.data?.data || usersResponse?.data || usersResponse || [];
+  if (Array.isArray(payload?.content)) return payload.content;
+  return Array.isArray(payload) ? payload : [];
+}
+
+function getCustomerName(userId, usersByHolderId) {
+  const rawUserId = String(userId || '').trim();
+  if (!rawUserId) return 'Unknown customer';
+  return usersByHolderId.get(rawUserId) || rawUserId;
+}
+
+function transformOrder(order, eventsById, usersByHolderId) {
   const ticketCount = Array.isArray(order.tickets) ? order.tickets.length : Number(order.ticketCount || 0);
   const status = normalizeOrderStatus(order.status);
   const event = eventsById.get(Number(order.eventId));
@@ -116,12 +130,11 @@ function transformOrder(order, eventsById) {
     id: order.id,
     orderId: `#ORD-${String(order.id || 0).padStart(4, '0')}`,
     eventName: event?.name || event?.title || (order.eventId ? `Event #${order.eventId}` : 'Ticket order'),
-    customer: order.userId || 'Unknown customer',
+    customer: getCustomerName(order.userId, usersByHolderId),
     createdAt: order.createdAt,
     amount: Number(order.totalPrice ?? order.amount ?? 0),
     status,
     ticketCount,
-    refundedTickets: status === 'Refunded' ? ticketCount : 0,
   };
 }
 
@@ -136,21 +149,27 @@ export default function TicketSalesPage() {
   useEffect(() => {
     let ignore = false;
 
-    async function loadSalesData() {
-      setLoading(true);
+    async function loadSalesData({ showLoading = false } = {}) {
+      if (showLoading) {
+        setLoading(true);
+      }
       setLoadError('');
 
       try {
-        const [ordersResponse, eventsResponse] = await Promise.all([
+        const [ordersResponse, eventsResponse, usersResponse] = await Promise.all([
           api.get('/booking/admin/orders'),
           api.get('/events').catch(() => null),
+          getAuthUsers().catch(() => []),
         ]);
 
         const rawOrders = ordersResponse.data?.data || ordersResponse.data || [];
         const eventsById = new Map(
           getEventList(eventsResponse).map((event) => [Number(event.id), event])
         );
-        const mappedOrders = (Array.isArray(rawOrders) ? rawOrders : []).map((order) => transformOrder(order, eventsById));
+        const usersByHolderId = new Map(
+          getUserList(usersResponse).map((user) => [`user-${user.id}`, user.username || user.email || `User ${user.id}`])
+        );
+        const mappedOrders = (Array.isArray(rawOrders) ? rawOrders : []).map((order) => transformOrder(order, eventsById, usersByHolderId));
 
         if (!ignore) setOrders(mappedOrders);
       } catch (error) {
@@ -163,10 +182,24 @@ export default function TicketSalesPage() {
       }
     }
 
-    loadSalesData();
+    loadSalesData({ showLoading: true });
+
+    const refreshInterval = window.setInterval(() => {
+      loadSalesData();
+    }, SALES_REFRESH_INTERVAL_MS);
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadSalesData();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       ignore = true;
+      window.clearInterval(refreshInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
@@ -193,9 +226,9 @@ export default function TicketSalesPage() {
 
   const stats = useMemo(() => {
     const completedOrders = filteredOrders.filter((order) => order.status === 'Completed');
+    const pendingOrders = filteredOrders.filter((order) => order.status === 'Pending');
     const completedRevenue = completedOrders.reduce((sum, order) => sum + order.amount, 0);
     const soldTickets = completedOrders.reduce((sum, order) => sum + order.ticketCount, 0);
-    const refundedTickets = filteredOrders.reduce((sum, order) => sum + order.refundedTickets, 0);
     const averageOrderValue = completedOrders.length ? Math.round(completedRevenue / completedOrders.length) : 0;
 
     return [
@@ -224,12 +257,12 @@ export default function TicketSalesPage() {
         iconBg: 'bg-emerald-100 text-emerald-600',
       },
       {
-        label: 'Refunded Tickets',
-        value: refundedTickets.toLocaleString(),
-        hint: 'Marked for customer refund',
-        icon: RefreshCcw,
-        surface: 'from-rose-50 to-red-50',
-        iconBg: 'bg-rose-100 text-rose-600',
+        label: 'Pending Orders',
+        value: pendingOrders.length.toLocaleString(),
+        hint: 'Awaiting payment or confirmation',
+        icon: Receipt,
+        surface: 'from-amber-50 to-yellow-50',
+        iconBg: 'bg-amber-100 text-amber-600',
       },
     ];
   }, [filteredOrders]);
@@ -341,7 +374,7 @@ export default function TicketSalesPage() {
             <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
               <div>
                 <h1 className="text-3xl font-black tracking-tight text-slate-950">Ticket Sales Analysis</h1>
-                <p className="mt-2 text-sm text-slate-500">Monitor revenue, orders, and refund activity across the latest ticket transactions.</p>
+                <p className="mt-2 text-sm text-slate-500">Monitor revenue, completed orders, and pending activity across the latest ticket transactions.</p>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -434,7 +467,7 @@ export default function TicketSalesPage() {
               <div className="flex flex-col gap-4 border-b border-slate-100 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <h2 className="text-2xl font-black text-slate-950">Recent Ticket Transactions</h2>
-                  <p className="mt-2 text-sm text-slate-500">Latest completed, pending, and refunded orders from the admin sales feed.</p>
+                  <p className="mt-2 text-sm text-slate-500">Latest completed, pending, and cancelled orders from the admin sales feed.</p>
                 </div>
               </div>
 
