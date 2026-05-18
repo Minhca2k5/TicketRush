@@ -1,1 +1,1 @@
--- All services use the shared ticketrush database created by POSTGRES_DB.
+-- All services use the shared ticketrush database created by POSTGRES_DBệu này 

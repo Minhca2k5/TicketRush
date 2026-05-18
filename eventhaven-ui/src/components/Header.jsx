@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Menu, Settings, ShieldCheck, Ticket, UserCircle2 } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
 import { UserMenu } from './UserMenu';
-import { getAuthRole, getAuthToken } from '../lib/auth';
+import { getAuthToken } from '../lib/auth';
 
 const navItems = [
   { label: 'Home', to: '/' },
@@ -89,6 +89,10 @@ export function Header() {
             <>
               <NotificationBell />
               <UserMenu />
+              <Link to="/orders" className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-violet-200">
+                <UserCircle2 size={18} className="text-violet-500" />
+                My Tickets
+              </Link>
             </>
           ) : (
             <>
@@ -100,10 +104,6 @@ export function Header() {
               </Link>
             </>
           )}
-          <Link to="/orders" className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-violet-200">
-            <UserCircle2 size={18} className="text-violet-500" />
-            My Tickets
-          </Link>
         </div>
 
         <button
@@ -128,21 +128,23 @@ export function Header() {
                 {item.label}
               </Link>
             ))}
-            <Link
-              to="/orders"
-              onClick={() => setMenuOpen(false)}
-              className="block rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-            >
-              My Tickets
-            </Link>
             {token && (
-              <Link
-                to="/profile"
-                onClick={() => setMenuOpen(false)}
-                className="block rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-              >
-                Profile
-              </Link>
+              <>
+                <Link
+                  to="/orders"
+                  onClick={() => setMenuOpen(false)}
+                  className="block rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  My Tickets
+                </Link>
+                <Link
+                  to="/profile"
+                  onClick={() => setMenuOpen(false)}
+                  className="block rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  Profile
+                </Link>
+              </>
             )}
           </div>
           {!token && (

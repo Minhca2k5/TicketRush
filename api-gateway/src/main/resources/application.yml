@@ -42,3 +42,11 @@ spring:
 
 jwt:
   secret: ticketrushJwtSecretKeyMustBeAtLeastThirtyTwoBytesLong2026
+
+chatbot:
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-2.5-flash}
+    base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
+  rag:
+    document-paths: ${CHATBOT_RAG_DOCUMENTS:../ARCHITECTURE.md,../TicketRush-Roadmap.md,../CONVENTIONS.md,../docker-compose.yml}

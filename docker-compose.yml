@@ -57,8 +57,15 @@ services:
       context: ./api-gateway
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      GEMINI_MODEL: "${GEMINI_MODEL:-gemini-2.5-flash}"
     ports:
       - "8080:8080"
+    volumes:
+      - ./ARCHITECTURE.md:/app/rag-docs/ARCHITECTURE.md:ro
+      - ./TicketRush-Roadmap.md:/app/rag-docs/TicketRush-Roadmap.md:ro
+      - ./CONVENTIONS.md:/app/rag-docs/CONVENTIONS.md:ro
+      - ./docker-compose.yml:/app/rag-docs/docker-compose.yml:ro
     depends_on:
       auth-service:
         condition: service_started

@@ -25,8 +25,22 @@ export function AppRoutes() {
       <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/" element={<Home />} />
       <Route path="/events" element={<AllEventsPage />} />
-      <Route path="/events/:id" element={<EventDetail />} />
-      <Route path="/orders" element={<OrderHistory />} />
+      <Route
+        path="/events/:id"
+        element={
+          <ProtectedRoute>
+            <EventDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/orders"
+        element={
+          <ProtectedRoute>
+            <OrderHistory />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/profile"
         element={

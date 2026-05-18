@@ -52,7 +52,10 @@ const Login = () => {
         fallbackPath = '/';
       }
     }
-    navigate(location.state?.from?.pathname || fallbackPath, { replace: true });
+    const redirectTo = location.state?.from
+      ? `${location.state.from.pathname || ''}${location.state.from.search || ''}${location.state.from.hash || ''}`
+      : fallbackPath;
+    navigate(redirectTo || fallbackPath, { replace: true });
   };
 
   return (
