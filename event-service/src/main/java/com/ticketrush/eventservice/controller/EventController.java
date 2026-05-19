@@ -132,6 +132,11 @@ public class EventController {
         return ResponseEntity.ok(ApiResponse.success("Event deleted successfully", null));
     }
 
+    @PostMapping("/{id}/end-now")
+    public ResponseEntity<ApiResponse<EventDTO>> endEventNow(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success("Event manually ended for testing", eventService.fastForwardEvent(id)));
+    }
+
     @GetMapping("/uploads/event-banners/{filename:.+}")
     public ResponseEntity<Resource> getUploadedEventBanner(@PathVariable String filename) {
         try {

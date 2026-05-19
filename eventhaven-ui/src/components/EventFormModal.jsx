@@ -70,8 +70,6 @@ function getDateTimeErrors(form, minStartTime) {
 
   if (!form.startTime) {
     nextErrors.startTime = 'Start date & time is required';
-  } else if (new Date(form.startTime).getTime() < new Date(minStartTime).getTime()) {
-    nextErrors.startTime = 'Start date & time cannot be in the past';
   }
 
   if (form.startTime && form.endTime) {
@@ -484,7 +482,6 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
                   <input
                     type="datetime-local"
                     className={inputCls(startTimeError)}
-                    min={minStartTime}
                     value={form.startTime}
                     onChange={(event) => setField('startTime', event.target.value)}
                   />
@@ -494,7 +491,6 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
                   <input
                     type="datetime-local"
                     className={inputCls(endTimeError)}
-                    min={minEndTime}
                     value={form.endTime}
                     onChange={(event) => setField('endTime', event.target.value)}
                   />

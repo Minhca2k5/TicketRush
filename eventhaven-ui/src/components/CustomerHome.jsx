@@ -334,7 +334,7 @@ export default function CustomerHome() {
         const payload = r.data?.data;
         // If it's paginated, it has .content, otherwise it might just be the array
         const eventsArray = payload?.content || payload || r.data || [];
-        setEvents(Array.isArray(eventsArray) ? eventsArray.filter((event) => isEventBookable(event)) : []);
+        setEvents(Array.isArray(eventsArray) ? eventsArray : []);
       })
       .catch(() => setEvents([]))
       .finally(() => setLoading(false));

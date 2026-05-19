@@ -298,7 +298,7 @@ export default function AllEventsPage() {
         </section>
 
         {/* Search & Filters Panel */}
-        <section className="mt-8 rounded-[28px] border border-slate-200/80 bg-white/90 p-4 shadow-md shadow-slate-200/70 backdrop-blur md:p-6">
+        <section className="relative z-30 mt-8 rounded-[28px] border border-slate-200/80 bg-white/90 p-4 shadow-md shadow-slate-200/70 backdrop-blur md:p-6">
           <div className="flex flex-col gap-4">
             {/* Search Bar */}
             <div className="relative">

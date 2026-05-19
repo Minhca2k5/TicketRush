@@ -135,6 +135,18 @@ public class EventService {
     }
 
     @Transactional
+    public EventDTO fastForwardEvent(Long id) {
+        Event event = eventRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Event not found"));
+        
+        event.setStartTime(LocalDateTime.now().minusDays(2));
+        event.setEndTime(LocalDateTime.now().minusDays(1));
+        event.setStatus("PAST");
+        
+        return mapToDTO(eventRepository.save(event));
+    }
+
+    @Transactional
     public void deleteEvent(Long id) {
         Event event = eventRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Event not found"));

@@ -15,6 +15,7 @@ import {
   Ticket,
   Trash2,
   Users,
+  Clock,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../services/api';
@@ -248,6 +249,16 @@ export default function AdminEvents() {
       });
     } finally {
       setLoadingEditor(false);
+    }
+  };
+
+  const handleFastForward = async (eventId) => {
+    try {
+      await api.post(`/events/${eventId}/end-now`);
+      setToast({ type: 'success', message: 'Event successfully ended for testing.' });
+      await loadEvents();
+    } catch (error) {
+      setToast({ type: 'warning', message: error.response?.data?.message || 'Unable to end event.' });
     }
   };
 
@@ -485,6 +496,14 @@ export default function AdminEvents() {
                                   aria-label="Delete"
                                 >
                                   <Trash2 size={17} />
+                                </button>
+                                <button
+                                  onClick={() => handleFastForward(event.id)}
+                                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-600"
+                                  title="End Event Now (Testing)"
+                                  aria-label="End Event Now"
+                                >
+                                  <Clock size={17} />
                                 </button>
                               </div>
                             </td>
