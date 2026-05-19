@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, Settings, ShieldCheck, Ticket, UserCircle2 } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
 import { UserMenu } from './UserMenu';
@@ -11,6 +11,7 @@ const navItems = [
 
 export function Header() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const token = getAuthToken();
   const isAdminRoute = location.pathname.startsWith('/admin');
@@ -38,6 +39,7 @@ export function Header() {
           <div className="flex items-center gap-3">
             <button
               type="button"
+              onClick={() => navigate('/admin/status')}
               className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
               title="System status"
             >
@@ -46,6 +48,7 @@ export function Header() {
             </button>
             <button
               type="button"
+              onClick={() => navigate('/admin/settings')}
               className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
               title="Admin settings"
             >
