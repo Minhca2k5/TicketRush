@@ -9,6 +9,10 @@ spring:
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
       routes:
+        - id: event-service-websocket
+          uri: ws://event-service:8082
+          predicates:
+            - Path=/ws/events/**
         - id: auth-service
           uri: http://auth-service:8081
           predicates:

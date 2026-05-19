@@ -27,6 +27,7 @@ import com.ticketrush.eventservice.repository.PriceTierRepository;
 import com.ticketrush.eventservice.repository.SeatRepository;
 import com.ticketrush.eventservice.repository.VenueRepository;
 import com.ticketrush.eventservice.repository.VenueZoneRepository;
+import com.ticketrush.eventservice.realtime.SeatMapRealtimePublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,11 +59,13 @@ public class EventService {
     private final PriceTierRepository priceTierRepository;
     private final SeatService seatService;
     private final ObjectMapper objectMapper;
+    private final SeatMapRealtimePublisher seatMapRealtimePublisher;
 
     @Transactional
     public EventDTO createEvent(EventDTO eventDTO) {
         Event event = new Event();
         Event savedEvent = persistEventGraph(event, eventDTO);
+        seatMapRealtimePublisher.publishSeatMapChanged(savedEvent.getId(), "EVENT_CREATED", List.of());
         return mapToDTO(savedEvent);
     }
 
@@ -125,6 +128,7 @@ public class EventService {
         Venue previousVenue = event.getVenue();
         Event updatedEvent = persistEventGraph(event, eventDTO);
         cleanupOrphanVenue(previousVenue, updatedEvent.getVenue());
+        seatMapRealtimePublisher.publishSeatMapChanged(updatedEvent.getId(), "EVENT_LAYOUT_UPDATED", List.of());
         return mapToDTO(updatedEvent);
     }
 

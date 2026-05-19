@@ -13,10 +13,13 @@ import { lockSeat, releaseSeat, checkout } from "../services/bookingService";
 import { getProfile } from "../services/authService";
 import { readUserSettings } from "../lib/userSettings";
 import SeatMapRenderer from "./seat-map/SeatMapRenderer";
+import { openSeatMapSocket } from "../services/seatRealtimeService";
 
 const HOLD_MINUTES = 10;
 const POLL_INTERVAL_IDLE_MS = 5000;
 const POLL_INTERVAL_ACTIVE_MS = 3000;
+const REALTIME_RECONNECT_MS = 2500;
+const REALTIME_REFRESH_DEBOUNCE_MS = 150;
 const HOLDER_STORAGE_KEY = "ticketrush-seat-holder";
 const SELECTION_STORAGE_PREFIX = "ticketrush-seat-selection";
 const CONFLICT_TOAST_MESSAGE = "Ghế này vừa có người đặt, vui lòng chọn ghế khác";
@@ -142,6 +145,8 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
   const selectedSeatsRef = useRef([]);
   const releaseExpiredInFlightRef = useRef(false);
   const hasHydratedSelectionRef = useRef(false);
+  const realtimeRefreshTimerRef = useRef(null);
+  const realtimeReconnectTimerRef = useRef(null);
 
   const mergeSeatDetails = useCallback((baseSeat, overrides = {}) => {
     const zoneName = resolveZoneName(baseSeat, resolveZoneName(overrides));
@@ -275,6 +280,17 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
     }
   }, [eventId]);
 
+  const scheduleRealtimeSeatSync = useCallback(() => {
+    if (realtimeRefreshTimerRef.current) {
+      window.clearTimeout(realtimeRefreshTimerRef.current);
+    }
+
+    realtimeRefreshTimerRef.current = window.setTimeout(() => {
+      realtimeRefreshTimerRef.current = null;
+      syncSeatStatus({ silentError: true }).catch(() => {});
+    }, REALTIME_REFRESH_DEBOUNCE_MS);
+  }, [syncSeatStatus]);
+
   useEffect(() => {
     if (!eventId) {
       return undefined;
@@ -300,6 +316,60 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
       window.clearInterval(interval);
     };
   }, [eventId, syncSeatStatus, selectedSeats.length]);
+
+  useEffect(() => {
+    if (!eventId) {
+      return undefined;
+    }
+
+    let active = true;
+    let socket = null;
+
+    const connect = () => {
+      if (!active) {
+        return;
+      }
+
+      socket = openSeatMapSocket(eventId, {
+        onOpen: () => {
+          setSyncMessage("");
+          scheduleRealtimeSeatSync();
+        },
+        onMessage: (message) => {
+          if (message?.type !== "SEAT_MAP_UPDATED") {
+            return;
+          }
+          if (String(message.eventId) !== String(eventId)) {
+            return;
+          }
+          scheduleRealtimeSeatSync();
+        },
+        onClose: () => {
+          if (!active) {
+            return;
+          }
+          realtimeReconnectTimerRef.current = window.setTimeout(connect, REALTIME_RECONNECT_MS);
+        },
+      });
+    };
+
+    connect();
+
+    return () => {
+      active = false;
+      if (realtimeReconnectTimerRef.current) {
+        window.clearTimeout(realtimeReconnectTimerRef.current);
+        realtimeReconnectTimerRef.current = null;
+      }
+      if (realtimeRefreshTimerRef.current) {
+        window.clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = null;
+      }
+      if (socket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(socket.readyState)) {
+        socket.close();
+      }
+    };
+  }, [eventId, scheduleRealtimeSeatSync]);
 
   useEffect(() => {
     // Detect changed seats for visual flash
@@ -593,7 +663,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
             ) : null}
             <span className="inline-flex items-center gap-2 text-slate-500">
               <RefreshCcw size={16} className={isSyncing ? "animate-spin" : ""} />
-              Auto-refresh every 5s
+              Realtime WebSocket + polling fallback
             </span>
           </div>
         </div>
