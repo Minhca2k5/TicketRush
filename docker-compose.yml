@@ -46,6 +46,7 @@ services:
       DB_NAME: ticketrush
       DB_USERNAME: minh
       DB_PASSWORD: minh123
+      BOOKING_SERVICE_URL: http://booking-service:8083
     ports:
       - "8082:8082"
     volumes:

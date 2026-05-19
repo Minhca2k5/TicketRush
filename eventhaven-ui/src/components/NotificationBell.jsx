@@ -1,83 +1,179 @@
-import { useEffect, useRef, useState } from 'react';
-import { Bell, CalendarDays, Check, Sparkles, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Bell, CalendarDays, Check, RotateCcw, Sparkles, Ticket, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import { getProfile } from '../services/authService';
+import {
+  clearNotifications,
+  deleteNotification as deleteNotificationRequest,
+  getNotifications,
+  getUnreadNotificationCount,
+  markAllNotificationsRead,
+  markNotificationRead,
+} from '../services/notificationService';
 import './NotificationBell.css';
 
-const NOTIFICATION_STORAGE_KEY = 'ticketrush-notifications';
-const KNOWN_EVENT_IDS_STORAGE_KEY = 'ticketrush-known-event-ids';
-const EVENT_POLL_INTERVAL_MS = 30000;
+const NOTIFICATION_POLL_INTERVAL_MS = 30000;
 
-function readJsonStorage(key, fallback) {
-  try {
-    const saved = localStorage.getItem(key);
-    return saved ? JSON.parse(saved) : fallback;
-  } catch {
-    return fallback;
-  }
+function getAccountHolderId(profile) {
+  if (profile?.id) return `user-${profile.id}`;
+  if (profile?.username) return `user-${profile.username}`;
+  return null;
 }
 
 function normalizeNotification(notification) {
   return {
     ...notification,
-    time: notification.time ? new Date(notification.time) : new Date(),
+    time: notification.createdAt ? new Date(notification.createdAt) : new Date(),
   };
 }
 
-function getEventLocation(event) {
-  return event?.location || event?.venue?.name || event?.venue?.address || 'Venue TBA';
+function getNotificationIcon(type) {
+  switch (type) {
+    case 'TICKET_PURCHASED':
+      return <Ticket size={16} />;
+    case 'EVENT_UPCOMING':
+      return <CalendarDays size={16} />;
+    case 'SEAT_RELEASED':
+      return <RotateCcw size={16} />;
+    default:
+      return <Sparkles size={16} />;
+  }
 }
 
-function buildEventNotification(event) {
-  const startTime = event.startTime ? new Date(event.startTime).toLocaleString() : 'Date TBA';
-
-  return {
-    id: `event-created-${event.id}`,
-    type: 'event_created',
-    title: 'Su kien moi vua duoc mo ban',
-    message: `${event.name || 'Untitled Event'} tai ${getEventLocation(event)}. Bat dau: ${startTime}.`,
-    time: new Date(),
-    read: false,
-    eventId: event.id,
-    actionUrl: `/events/${event.id}`,
-  };
+function getNotificationIconClass(type) {
+  switch (type) {
+    case 'TICKET_PURCHASED':
+      return 'purchase';
+    case 'EVENT_UPCOMING':
+      return 'event';
+    case 'SEAT_RELEASED':
+      return 'release';
+    default:
+      return 'event';
+  }
 }
 
 export function NotificationBell() {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState(() => (
-    readJsonStorage(NOTIFICATION_STORAGE_KEY, []).map(normalizeNotification)
-  ));
+  const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [userId, setUserId] = useState(null);
+  const [loading, setLoading] = useState(false);
   const containerRef = useRef(null);
   const isPollingRef = useRef(false);
 
-  useEffect(() => {
-    const count = notifications.filter((notification) => !notification.read).length;
-    setUnreadCount(count);
-    localStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify(notifications));
-  }, [notifications]);
+  const loadNotifications = useCallback(async (targetUserId = userId) => {
+    if (!targetUserId || isPollingRef.current) {
+      return;
+    }
 
-  const markAsRead = (id) => {
+    isPollingRef.current = true;
+    setLoading(true);
+    try {
+      const [payload, count] = await Promise.all([
+        getNotifications(targetUserId),
+        getUnreadNotificationCount(targetUserId),
+      ]);
+      setNotifications((Array.isArray(payload) ? payload : []).map(normalizeNotification));
+      setUnreadCount(count);
+    } catch {
+      // Keep the current list if the notification service is temporarily unavailable.
+    } finally {
+      isPollingRef.current = false;
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    let active = true;
+
+    getProfile()
+      .then((profile) => {
+        if (!active) return;
+        const holderId = getAccountHolderId(profile);
+        setUserId(holderId);
+        if (holderId) {
+          loadNotifications(holderId);
+        }
+      })
+      .catch(() => {
+        if (active) setUserId(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [loadNotifications]);
+
+  useEffect(() => {
+    if (!userId) {
+      return undefined;
+    }
+
+    const interval = window.setInterval(() => loadNotifications(userId), NOTIFICATION_POLL_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+  }, [loadNotifications, userId]);
+
+  const markAsRead = async (id) => {
+    if (!userId) return;
+
+    const wasUnread = notifications.some((notification) => notification.id === id && !notification.read);
     setNotifications((previous) => (
       previous.map((notification) => (
         notification.id === id ? { ...notification, read: true } : notification
       ))
     ));
+    if (wasUnread) {
+      setUnreadCount((previous) => Math.max(previous - 1, 0));
+    }
+
+    try {
+      await markNotificationRead(userId, id);
+    } catch {
+      loadNotifications(userId);
+    }
   };
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
+    if (!userId) return;
+
     setNotifications((previous) => previous.map((notification) => ({ ...notification, read: true })));
+    setUnreadCount(0);
+    try {
+      const payload = await markAllNotificationsRead(userId);
+      setNotifications((Array.isArray(payload) ? payload : []).map(normalizeNotification));
+    } catch {
+      loadNotifications(userId);
+    }
   };
 
-  const deleteNotification = (id) => {
+  const deleteNotification = async (id) => {
+    if (!userId) return;
+
+    const removedNotification = notifications.find((notification) => notification.id === id);
     setNotifications((previous) => previous.filter((notification) => notification.id !== id));
+    if (removedNotification && !removedNotification.read) {
+      setUnreadCount((previous) => Math.max(previous - 1, 0));
+    }
+    try {
+      await deleteNotificationRequest(userId, id);
+    } catch {
+      loadNotifications(userId);
+    }
   };
 
-  const clearAll = () => {
+  const clearAll = async () => {
+    if (!userId) return;
+
     setNotifications([]);
+    setUnreadCount(0);
     setIsOpen(false);
+    try {
+      await clearNotifications(userId);
+    } catch {
+      loadNotifications(userId);
+    }
   };
 
   const timeAgo = (date) => {
@@ -101,59 +197,9 @@ export function NotificationBell() {
   };
 
   useEffect(() => {
-    let active = true;
-
-    const syncNewEvents = async () => {
-      if (isPollingRef.current) return;
-      isPollingRef.current = true;
-
-      try {
-        const response = await api.get('/events');
-        const payload = response.data?.data?.content || response.data?.data || response.data || [];
-        const events = Array.isArray(payload) ? payload : [];
-        const currentIds = events.map((event) => String(event.id)).filter(Boolean);
-        const knownIds = readJsonStorage(KNOWN_EVENT_IDS_STORAGE_KEY, null);
-
-        if (!active) return;
-
-        if (!Array.isArray(knownIds)) {
-          localStorage.setItem(KNOWN_EVENT_IDS_STORAGE_KEY, JSON.stringify(currentIds));
-          return;
-        }
-
-        const knownIdSet = new Set(knownIds);
-        const newEvents = events.filter((event) => event?.id && !knownIdSet.has(String(event.id)));
-
-        if (newEvents.length) {
-          setNotifications((previous) => {
-            const previousIds = new Set(previous.map((notification) => notification.id));
-            const incoming = newEvents
-              .map(buildEventNotification)
-              .filter((notification) => !previousIds.has(notification.id));
-
-            return [...incoming, ...previous].slice(0, 40);
-          });
-        }
-
-        localStorage.setItem(KNOWN_EVENT_IDS_STORAGE_KEY, JSON.stringify(currentIds));
-      } catch {
-        // Keep existing notifications if the Event Service is temporarily unavailable.
-      } finally {
-        isPollingRef.current = false;
-      }
-    };
-
-    syncNewEvents();
-    const interval = window.setInterval(syncNewEvents, EVENT_POLL_INTERVAL_MS);
-
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-    };
-  }, []);
-
-  useEffect(() => {
     if (!isOpen) return undefined;
+
+    loadNotifications(userId);
 
     const handleClickOutside = (event) => {
       if (!containerRef.current?.contains(event.target)) {
@@ -168,7 +214,7 @@ export function NotificationBell() {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
     };
-  }, [isOpen]);
+  }, [isOpen, loadNotifications, userId]);
 
   return (
     <div className="notification-container" ref={containerRef}>
@@ -179,83 +225,81 @@ export function NotificationBell() {
       >
         <Bell size={20} />
         {unreadCount > 0 && (
-          <span className="notification-badge">{unreadCount}</span>
+          <span className="notification-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
         )}
       </button>
 
       {isOpen && (
-        <>
-          <div className="notification-dropdown">
-            <div className="notification-header">
-              <div>
-                <h3>Notifications</h3>
-                <p>Event updates and ticket activity</p>
+        <div className="notification-dropdown">
+          <div className="notification-header">
+            <div>
+              <h3>Notifications</h3>
+              <p>Tickets, upcoming events, and released seats</p>
+            </div>
+            {notifications.length > 0 && (
+              <div className="notification-actions">
+                <button
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    markAllAsRead();
+                  }}
+                  title="Mark all as read"
+                >
+                  <Check size={14} />
+                  <span>Read all</span>
+                </button>
+                <button
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    clearAll();
+                  }}
+                  title="Clear all"
+                >
+                  <Trash2 size={14} />
+                  <span>Clear</span>
+                </button>
               </div>
-              {notifications.length > 0 && (
-                <div className="notification-actions">
+            )}
+          </div>
+
+          <div className="notification-list">
+            {notifications.length === 0 ? (
+              <div className="empty-notifications">
+                <Bell size={32} strokeWidth={1.5} />
+                <p>{loading ? 'Loading notifications...' : 'No notifications'}</p>
+              </div>
+            ) : (
+              notifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  className={`notification-item ${!notification.read ? 'unread' : ''} ${notification.actionUrl ? 'clickable' : ''}`}
+                  onClick={() => openNotification(notification)}
+                >
+                  <div className={`notification-icon ${getNotificationIconClass(notification.type)}`}>
+                    {getNotificationIcon(notification.type)}
+                  </div>
+                  <div className="notification-content">
+                    <h4>{notification.title}</h4>
+                    <p>{notification.message}</p>
+                    <span className="notification-time">
+                      {timeAgo(notification.time)}
+                    </span>
+                  </div>
                   <button
+                    className="notification-delete"
                     onClick={(event) => {
                       event.stopPropagation();
-                      markAllAsRead();
+                      deleteNotification(notification.id);
                     }}
-                    title="Mark all as read"
-                  >
-                    <Check size={14} />
-                    <span>Read all</span>
-                  </button>
-                  <button
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      clearAll();
-                    }}
-                    title="Clear all"
+                    title="Delete"
                   >
                     <Trash2 size={14} />
-                    <span>Clear</span>
                   </button>
                 </div>
-              )}
-            </div>
-
-            <div className="notification-list">
-              {notifications.length === 0 ? (
-                <div className="empty-notifications">
-                  <Bell size={32} strokeWidth={1.5} />
-                  <p>No notifications</p>
-                </div>
-              ) : (
-                notifications.map((notification) => (
-                  <div
-                    key={notification.id}
-                    className={`notification-item ${!notification.read ? 'unread' : ''} ${notification.actionUrl ? 'clickable' : ''}`}
-                    onClick={() => openNotification(notification)}
-                  >
-                    <div className={`notification-icon ${notification.type === 'event_created' ? 'event' : ''}`}>
-                      {notification.type === 'event_created' ? <Sparkles size={16} /> : <CalendarDays size={16} />}
-                    </div>
-                    <div className="notification-content">
-                      <h4>{notification.title}</h4>
-                      <p>{notification.message}</p>
-                      <span className="notification-time">
-                        {timeAgo(notification.time)}
-                      </span>
-                    </div>
-                    <button
-                      className="notification-delete"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        deleteNotification(notification.id);
-                      }}
-                      title="Delete"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
+              ))
+            )}
           </div>
-        </>
+        </div>
       )}
     </div>
   );

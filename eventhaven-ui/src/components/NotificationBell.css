@@ -166,6 +166,16 @@
   color: #7c3aed;
 }
 
+.notification-icon.purchase {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.notification-icon.release {
+  background: #fef3c7;
+  color: #d97706;
+}
+
 .notification-content {
   flex: 1;
   min-width: 0;

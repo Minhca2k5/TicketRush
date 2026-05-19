@@ -30,6 +30,7 @@ public class BookingService {
     private final TicketRepository ticketRepository;
     private final RestTemplate restTemplate;
     private final BookingEmailService bookingEmailService;
+    private final NotificationService notificationService;
 
     @Value("${app.event-service-url}")
     private String eventServiceUrl;
@@ -89,7 +90,9 @@ public class BookingService {
         if (response.getBody() == null || !"SUCCESS".equalsIgnoreCase(response.getBody().getStatus())) {
             throw new RuntimeException("Failed to release seat in event-service");
         }
-        return response.getBody().getData();
+        SeatDTO releasedSeat = response.getBody().getData();
+        notificationService.createSeatReleasedNotification(holderId, eventId, releasedSeat);
+        return releasedSeat;
     }
 
     @Transactional
@@ -136,6 +139,8 @@ public class BookingService {
             dto.setQrCodeToken(ticket.getQrCodeToken());
             ticketDTOs.add(dto);
         }
+
+        notificationService.createTicketPurchasedNotification(order, ticketDTOs.size(), totalPrice);
 
         OrderDTO orderDTO = new OrderDTO();
         orderDTO.setId(order.getId());

@@ -45,6 +45,7 @@ public class SeatService {
     private final SeatRepository seatRepository;
     private final EventPriceTierRepository eventPriceTierRepository;
     private final SeatMapRealtimePublisher seatMapRealtimePublisher;
+    private final BookingNotificationClient bookingNotificationClient;
 
     @Transactional
     public void createSeatsForEvent(SeatCreationRequest request) {
@@ -234,6 +235,19 @@ public class SeatService {
             return;
         }
 
+        List<ExpiredSeatNotification> notifications = expiredSeats.stream()
+                .filter(seat -> seat.getLockHolder() != null && !seat.getLockHolder().isBlank())
+                .filter(seat -> seat.getEvent() != null && seat.getEvent().getId() != null)
+                .map(seat -> new ExpiredSeatNotification(
+                        seat.getLockHolder(),
+                        seat.getEvent().getId(),
+                        seat.getId(),
+                        seat.getSeatNumber(),
+                        seat.getRowName(),
+                        seat.getLockExpiresAt()
+                ))
+                .collect(Collectors.toList());
+
         expiredSeats.forEach(this::releaseLock);
         seatRepository.saveAll(expiredSeats);
         seatMapRealtimePublisher.publishSeatMapChanged(
@@ -241,6 +255,7 @@ public class SeatService {
                 "LOCKS_EXPIRED",
                 expiredSeats.stream().map(Seat::getId).collect(Collectors.toList())
         );
+        notifications.forEach(this::notifyExpiredSeatReleased);
     }
 
 
@@ -350,5 +365,26 @@ public class SeatService {
             throw new RuntimeException(message);
         }
         return value;
+    }
+
+    private void notifyExpiredSeatReleased(ExpiredSeatNotification notification) {
+        bookingNotificationClient.notifySeatReleased(
+                notification.userId(),
+                notification.eventId(),
+                notification.seatId(),
+                notification.seatNumber(),
+                notification.rowName(),
+                notification.lockExpiresAt()
+        );
+    }
+
+    private record ExpiredSeatNotification(
+            String userId,
+            Long eventId,
+            Long seatId,
+            String seatNumber,
+            String rowName,
+            LocalDateTime lockExpiresAt
+    ) {
     }
 }
