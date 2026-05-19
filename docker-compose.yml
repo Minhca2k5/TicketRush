@@ -88,6 +88,14 @@ services:
       DB_USERNAME: minh
       DB_PASSWORD: minh123
       EVENT_SERVICE_URL: http://event-service:8082
+      SMTP_HOST: "${SMTP_HOST:-smtp.gmail.com}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USERNAME: "${SMTP_USERNAME:?Set SMTP_USERNAME in .env}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:?Set SMTP_PASSWORD in .env}"
+      SMTP_AUTH: "${SMTP_AUTH:-true}"
+      SMTP_STARTTLS: "${SMTP_STARTTLS:-true}"
+      SMTP_SSL_ENABLE: "${SMTP_SSL_ENABLE:-false}"
+      MAIL_FROM: "${MAIL_FROM:-${SMTP_USERNAME:?Set SMTP_USERNAME in .env}}"
     ports:
       - "8083:8083"
     depends_on:
