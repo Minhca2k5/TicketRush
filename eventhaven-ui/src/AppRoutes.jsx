@@ -7,7 +7,7 @@ import EventDetail from './components/EventDetail';
 import AdminEvents from './components/AdminEvents';
 import AdminEventDetail from './components/AdminEventDetail';
 import AdminDashboard from './components/AdminDashboard';
-import { ProtectedRoute } from './components/ProtectedRoute';
+import { CustomerRoute, ProtectedRoute } from './components/ProtectedRoute';
 import Profile from './components/Profile';
 import TicketSalesPage from './pages/admin/TicketSalesPage';
 import SystemReportsPage from './pages/admin/SystemReportsPage';
@@ -23,12 +23,26 @@ export function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
-      <Route path="/" element={<Home />} />
-      <Route path="/events" element={<AllEventsPage />} />
+      <Route
+        path="/"
+        element={
+          <CustomerRoute>
+            <Home />
+          </CustomerRoute>
+        }
+      />
+      <Route
+        path="/events"
+        element={
+          <CustomerRoute>
+            <AllEventsPage />
+          </CustomerRoute>
+        }
+      />
       <Route
         path="/events/:id"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requiredRole="CUSTOMER">
             <EventDetail />
           </ProtectedRoute>
         }
@@ -36,7 +50,7 @@ export function AppRoutes() {
       <Route
         path="/orders"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requiredRole="CUSTOMER">
             <OrderHistory />
           </ProtectedRoute>
         }
@@ -44,7 +58,7 @@ export function AppRoutes() {
       <Route
         path="/profile"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requiredRole="CUSTOMER">
             <Profile />
           </ProtectedRoute>
         }
@@ -52,7 +66,7 @@ export function AppRoutes() {
       <Route
         path="/settings"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requiredRole="CUSTOMER">
             <UserSettingsPage />
           </ProtectedRoute>
         }

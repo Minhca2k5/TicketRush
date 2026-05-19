@@ -18,6 +18,33 @@ const ZOOM_LERP = 0.22;
 const ROW_LABEL_SCREEN_GAP = 34;
 const ZONE_TOOLTIP_HEIGHT = 34;
 
+const canvasThemes = {
+  dark: {
+    frameClass: 'border-neutral-900 bg-[#09090b] shadow-[0_24px_80px_rgba(0,0,0,0.42)]',
+    toolbarClass: 'border-white/10 bg-[#09090b]/95 text-slate-200',
+    inputClass: 'border-violet-400 bg-slate-950 px-2 text-white focus:ring-violet-500',
+    zoomButtonClass: 'text-slate-100 hover:bg-white/10 hover:text-white',
+    background: '#09090b',
+    axis: '#ffffff',
+    axisOpacity: 0.05,
+    zoneFill: '#ffffff',
+    zoneOpacity: 0.06,
+    rowLabel: '#cbd5e1',
+  },
+  light: {
+    frameClass: 'border-slate-200 bg-[#f8fafc] shadow-[0_24px_80px_rgba(15,23,42,0.12)]',
+    toolbarClass: 'border-slate-200 bg-white/80 text-slate-600',
+    inputClass: 'border-violet-300 bg-white px-2 text-slate-800 focus:ring-violet-500',
+    zoomButtonClass: 'text-slate-700 hover:bg-violet-50 hover:text-violet-700',
+    background: '#f8fafc',
+    axis: '#cbd5e1',
+    axisOpacity: 1,
+    zoneFill: '#ede9fe',
+    zoneOpacity: 0.35,
+    rowLabel: '#475569',
+  },
+};
+
 const statusColor = {
   AVAILABLE: { fill: '#ffffff', stroke: '#c4b5fd', text: '#6d28d9' },
   SELECTED: { fill: '#7c3aed', stroke: '#6d28d9', text: '#ffffff' },
@@ -334,52 +361,8 @@ function getElementCenter(element) {
 
 function getRowLabels(zone, rotation = 0) {
   const renderableSeats = getRenderableSeats(zone);
-
-  if (isSidewaysRotation(rotation)) {
-    const seatOneAnchors = renderableSeats
-      .filter((seat) => Number(seatNumberLabel(seat.seatNumber)) === 1)
-      .map((seat) => {
-        const point = layoutSeatPoint(seat);
-        const screenPoint = rotatePoint(point, rotation);
-        return {
-          rowName: seat.rowName,
-          point,
-          screenPoint,
-        };
-      })
-      .sort((first, second) => first.screenPoint.x - second.screenPoint.x);
-
-    if (seatOneAnchors.length) {
-      return seatOneAnchors.map((anchor, index) => {
-        const nextSeatInRow = renderableSeats.find((seat) => {
-          const rowName = seat.rowName || String(seat.seatNumber || '').replace(/\d+$/, '');
-          return rowName === anchor.rowName && Number(seatNumberLabel(seat.seatNumber)) === 2;
-        });
-        const nextSeatScreenPoint = nextSeatInRow
-          ? rotatePoint(layoutSeatPoint(nextSeatInRow), rotation)
-          : null;
-        const directionToNextSeat = nextSeatScreenPoint
-          ? Math.sign(nextSeatScreenPoint.y - anchor.screenPoint.y)
-          : -1;
-        const labelDirection = directionToNextSeat === 0 ? -1 : -directionToNextSeat;
-        const labelPoint = screenVectorToZoneLocal(
-          {
-            x: anchor.screenPoint.x,
-            y: anchor.screenPoint.y + labelDirection * ROW_LABEL_SCREEN_GAP,
-          },
-          rotation,
-        );
-
-        return {
-          rowName: anchor.rowName || rowNameFrom(index, zone.rowLabel),
-          labelX: labelPoint.x,
-          labelY: labelPoint.y,
-        };
-      });
-    }
-  }
-
   const rows = new Map();
+
   renderableSeats.forEach((seat) => {
     const rowName = seat.rowName || String(seat.seatNumber || '').replace(/\d+$/, '') || '';
     if (!rowName) return;
@@ -387,11 +370,29 @@ function getRowLabels(zone, rotation = 0) {
     const current = rows.get(rowName);
     const seatLabelNumber = Number(seatNumberLabel(seat.seatNumber));
     const isSeatOne = seatLabelNumber === 1;
-    if (!current || (isSeatOne && !current.isSeatOne) || (!current.isSeatOne && point.x < current.x)) {
+
+    if (
+      !current
+      || (isSeatOne && !current.isSeatOne)
+      || (!current.isSeatOne && point.x < current.x)
+    ) {
       rows.set(rowName, { rowName, isSeatOne, ...point });
     }
   });
-  return Array.from(rows.values()).sort((a, b) => a.y - b.y);
+
+  return Array.from(rows.values())
+    .map((row) => {
+      return {
+        rowName: row.rowName,
+        labelX: row.x - ROW_LABEL_SCREEN_GAP,
+        labelY: row.y,
+      };
+    })
+    .sort((a, b) => {
+      const first = rotatePoint({ x: a.labelX, y: a.labelY }, rotation);
+      const second = rotatePoint({ x: b.labelX, y: b.labelY }, rotation);
+      return first.y - second.y;
+    });
 }
 
 function expandBounds(bounds, nextBounds) {
@@ -615,8 +616,12 @@ export default function CustomerSeatMapCanvas({
   layout,
   liveSeats = [],
   selectedSeats = [],
+  canvasTheme = 'light',
+  fillViewport = false,
+  className = '',
   onToggleSeat = () => {},
 }) {
+  const theme = canvasThemes[canvasTheme] || canvasThemes.light;
   const containerRef = useRef(null);
   const panStartRef = useRef(null);
   const zoomRef = useRef(0.9);
@@ -626,6 +631,7 @@ export default function CustomerSeatMapCanvas({
   const panMovedRef = useRef(false);
   const suppressSeatClickRef = useRef(false);
   const [stageWidth, setStageWidth] = useState(900);
+  const [containerHeight, setContainerHeight] = useState(0);
   const [zoom, setZoom] = useState(0.9);
   const [isEditingZoom, setIsEditingZoom] = useState(false);
   const [zoomInput, setZoomInput] = useState('');
@@ -635,6 +641,7 @@ export default function CustomerSeatMapCanvas({
   useEffect(() => {
     const observer = new ResizeObserver(([entry]) => {
       setStageWidth(Math.max(320, entry.contentRect.width));
+      setContainerHeight(Math.max(0, entry.contentRect.height));
     });
     if (containerRef.current) observer.observe(containerRef.current);
     return () => observer.disconnect();
@@ -654,7 +661,9 @@ export default function CustomerSeatMapCanvas({
     }
   }, []);
 
-  const stageHeight = Math.min(720, Math.max(460, stageWidth * 0.68));
+  const stageHeight = fillViewport && containerHeight
+    ? Math.max(520, containerHeight - 49)
+    : Math.min(720, Math.max(460, stageWidth * 0.68));
   const baseScale = stageWidth / DESIGN_WIDTH;
 
   const selectedIds = useMemo(
@@ -911,8 +920,8 @@ export default function CustomerSeatMapCanvas({
   };
 
   return (
-    <div ref={containerRef} className="h-full w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-[0_24px_80px_rgba(15,23,42,0.18)]">
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 text-xs font-bold text-slate-300">
+    <div ref={containerRef} className={`h-full w-full overflow-hidden rounded-2xl border ${theme.frameClass} ${className}`}>
+      <div className={`flex items-center justify-between border-b px-4 py-3 text-xs font-bold ${theme.toolbarClass}`}>
         <span>Scroll to zoom - drag empty space to pan</span>
         {isEditingZoom ? (
           <div className="flex items-center gap-1">
@@ -922,7 +931,7 @@ export default function CustomerSeatMapCanvas({
               onChange={(event) => setZoomInput(event.target.value)}
               onBlur={() => applyZoomPercent(zoomInput)}
               onKeyDown={handleZoomInputKeyDown}
-              className="h-6 w-14 rounded-md border border-violet-400 bg-slate-900 px-2 text-right text-xs font-bold text-white outline-none focus:ring-2 focus:ring-violet-500"
+              className={`h-6 w-14 rounded-md border text-right text-xs font-bold outline-none focus:ring-2 ${theme.inputClass}`}
               inputMode="numeric"
             />
             <span>%</span>
@@ -931,7 +940,7 @@ export default function CustomerSeatMapCanvas({
           <button
             type="button"
             onClick={startEditingZoom}
-            className="rounded-md px-2 py-1 text-xs font-bold text-slate-200 transition hover:bg-white/10 hover:text-white"
+            className={`rounded-md px-2 py-1 text-xs font-bold transition ${theme.zoomButtonClass}`}
             title="Click to set zoom percentage"
           >
             {Math.round(zoom * 100)}%
@@ -953,9 +962,9 @@ export default function CustomerSeatMapCanvas({
         }}
       >
         <Layer x={pan.x} y={pan.y} scaleX={baseScale * zoom} scaleY={baseScale * zoom}>
-          <Rect name="seat-map-background" width={DESIGN_WIDTH} height={DESIGN_HEIGHT} fill="#020617" />
-          <Line points={[DESIGN_WIDTH / 2, 0, DESIGN_WIDTH / 2, DESIGN_HEIGHT]} stroke="#1e293b" dash={[8, 10]} />
-          <Line points={[0, DESIGN_HEIGHT / 2, DESIGN_WIDTH, DESIGN_HEIGHT / 2]} stroke="#1e293b" dash={[8, 10]} />
+          <Rect name="seat-map-background" width={DESIGN_WIDTH} height={DESIGN_HEIGHT} fill={theme.background} />
+          <Line points={[DESIGN_WIDTH / 2, 0, DESIGN_WIDTH / 2, DESIGN_HEIGHT]} stroke={theme.axis} opacity={theme.axisOpacity} dash={[8, 10]} />
+          <Line points={[0, DESIGN_HEIGHT / 2, DESIGN_WIDTH, DESIGN_HEIGHT / 2]} stroke={theme.axis} opacity={theme.axisOpacity} dash={[8, 10]} />
 
           {zones.map((zone) => {
             const seatBounds = getZoneBounds(zone);
@@ -983,8 +992,8 @@ export default function CustomerSeatMapCanvas({
                   width={bounds.width}
                   height={bounds.height}
                   cornerRadius={22}
-                  fill="#ffffff"
-                  opacity={0.06}
+                  fill={theme.zoneFill}
+                  opacity={theme.zoneOpacity}
                   stroke="#7c3aed"
                   strokeWidth={1.5}
                   dash={[8, 8]}
@@ -1048,13 +1057,7 @@ export default function CustomerSeatMapCanvas({
                 })}
 
                 {rowLabels.map((row) => {
-                  const rowLabelPosition = clampScreenAlignedPointInsideBounds(
-                    getRowLabelPosition(row, zoneRotation),
-                    seatBounds,
-                    zoneRotation,
-                    24,
-                    16,
-                  );
+                  const rowLabelPosition = getRowLabelPosition(row, zoneRotation);
 
                   return (
                     <Group
@@ -1070,7 +1073,7 @@ export default function CustomerSeatMapCanvas({
                         width={24}
                         align="center"
                         text={row.rowName}
-                        fill="#cbd5e1"
+                        fill={theme.rowLabel}
                         fontStyle="bold"
                         fontSize={13}
                       />

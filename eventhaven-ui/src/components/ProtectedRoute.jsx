@@ -14,3 +14,11 @@ export function ProtectedRoute({ children, requiredRole }) {
 
   return children;
 }
+
+export function CustomerRoute({ children }) {
+  if (isAuthenticated() && getAuthRole() === 'ADMIN') {
+    return <Navigate to="/admin" replace />;
+  }
+
+  return children;
+}

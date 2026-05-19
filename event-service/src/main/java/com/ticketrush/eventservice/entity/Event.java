@@ -25,11 +25,18 @@ public class Event {
     @Column(length = 150)
     private String organizer;
 
+    @Column(columnDefinition = "TEXT")
     private String description;
+
+    @Column(columnDefinition = "TEXT")
     private String location;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
+
+    @Column(columnDefinition = "TEXT")
     private String imageUrl;
+
+    @Column(columnDefinition = "TEXT")
     private String bannerUrl;
     private String status;
 
