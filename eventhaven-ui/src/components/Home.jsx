@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowRight, CalendarDays, ImageOff, MapPin, Ticket } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
+import { getAuthRole } from '../lib/auth';
 import HeroSlider from './HeroSlider';
 import { getEventPriceInfo } from '../lib/event-pricing';
 import { isEventBookable } from '../lib/event-status';
@@ -136,6 +137,11 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const location = useLocation();
+
+  const role = getAuthRole();
+  if (role === 'ADMIN') {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
 
   const search = new URLSearchParams(location.search).get('search')?.toLowerCase() || '';
   const category = new URLSearchParams(location.search).get('category')?.toLowerCase() || '';
