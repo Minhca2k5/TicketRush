@@ -568,8 +568,8 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
   const hasCoordinateLayout = Array.isArray(coordinateLayout?.zones) && coordinateLayout.zones.length > 0;
 
   return (
-    <div className="bg-[linear-gradient(180deg,#f8faff_0%,#eef2ff_100%)]">
-      <main className="mx-auto max-w-7xl px-4 py-8 lg:px-8 lg:py-10">
+    <div className="bg-[linear-gradient(180deg,#f6f8fc_0%,#eef3f8_48%,#f8fafc_100%)]">
+      <main className="mx-auto max-w-[1760px] px-4 py-8 lg:px-8 lg:py-10">
         <EventHeader event={event} />
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-white/70 bg-white/80 px-5 py-4 text-sm text-slate-600 shadow-sm">
@@ -598,24 +598,28 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
           </div>
         </div>
 
-        <div className="mt-8 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="space-y-6">
+        <div className="mt-8 grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
+          <div className="space-y-6 xl:col-span-9">
             {hasCoordinateLayout ? (
-              <div className="rounded-[28px] border border-white/70 bg-white/85 p-5 shadow-sm md:p-6">
+              <div className="rounded-[28px] border border-white/70 bg-white/85 p-4 shadow-sm md:p-5">
                 <div className="mb-5">
                   <h3 className="text-lg font-bold text-slate-900">Interactive Seat Map</h3>
                   <p className="text-sm text-slate-500">
                     The venue layout is rendered from the admin design canvas, including stage, field, exits, zones, and rotation.
                   </p>
                 </div>
-                <SeatMapRenderer
-                  isEditable={false}
-                  eventId={eventId}
-                  layout={coordinateLayout}
-                  liveSeats={rawLiveSeats}
-                  selectedSeats={selectedSeats.map((seat) => ({ seat }))}
-                  onToggleSeat={handleCanvasSeatSelect}
-                />
+                <div className="h-[calc(100vh-220px)] min-h-[620px]">
+                  <SeatMapRenderer
+                    isEditable={false}
+                    eventId={eventId}
+                    layout={coordinateLayout}
+                    liveSeats={rawLiveSeats}
+                    selectedSeats={selectedSeats.map((seat) => ({ seat }))}
+                    canvasTheme="light"
+                    fillViewport
+                    onToggleSeat={handleCanvasSeatSelect}
+                  />
+                </div>
               </div>
             ) : (
               <SeatMap
@@ -633,7 +637,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
             ) : null}
           </div>
 
-          <aside className="hidden xl:block">
+          <aside className="hidden xl:col-span-3 xl:block">
             <div className="sticky top-24">
               <BookingCart
                 selectedSeats={selectedSeats}

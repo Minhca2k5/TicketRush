@@ -1,10 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Group, Layer, Line, Rect, Stage, Text, Transformer } from 'react-konva';
 import { LocateFixed, MousePointer2, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
 
 const DESIGN_WIDTH = 980;
 const DESIGN_HEIGHT = 760;
+const GRID_SIZE = 80;
+const VIEWPORT_PADDING = 96;
+const MIN_VIEWPORT_SCALE = 0.3;
+const MAX_VIEWPORT_SCALE = 1.5;
+const ZOOM_STEP = 0.12;
 const SEAT_RADIUS = 6;
+const ZONE_BOUNDS_PADDING = SEAT_RADIUS + 4;
 const ZONE_TOOLTIP_HEIGHT = 34;
 
 const staticElementOptions = [
@@ -124,14 +130,14 @@ function getStaticElementConfig(type) {
   return staticElementOptions.find((element) => element.type === type) || staticElementOptions[0];
 }
 
-function createStaticElement(type) {
+function createStaticElement(type, position = {}) {
   const config = getStaticElementConfig(type);
   return {
     id: nextId(`static-${type}`),
     type,
     label: config.label,
-    x: 0.5,
-    y: type === 'exit' ? 0.86 : 0.5,
+    x: position.x ?? 0.5,
+    y: position.y ?? 0.5,
     width: config.width,
     height: config.height,
     rotation: 0,
@@ -248,10 +254,10 @@ function getZoneBounds(zone, seats) {
   const xs = seats.map((seat) => seat.x);
   const ys = seats.map((seat) => seat.y);
   return {
-    minX: Math.min(...xs) - 24,
-    maxX: Math.max(...xs) + 24,
-    minY: Math.min(...ys) - 24,
-    maxY: Math.max(...ys) + 24,
+    minX: Math.min(...xs) - ZONE_BOUNDS_PADDING,
+    maxX: Math.max(...xs) + ZONE_BOUNDS_PADDING,
+    minY: Math.min(...ys) - ZONE_BOUNDS_PADDING,
+    maxY: Math.max(...ys) + ZONE_BOUNDS_PADDING,
   };
 }
 
@@ -286,10 +292,13 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
   const transformerRef = useRef(null);
   const panStartRef = useRef(null);
   const hydratedEventIdRef = useRef(eventId);
+  const autoCenteredLayoutRef = useRef('');
   const zoneRefsRef = useRef(new Map());
   const staticRefsRef = useRef(new Map());
-  const [stageWidth, setStageWidth] = useState(760);
-  const [viewportScale, setViewportScale] = useState(() => initialEditorState.viewportScale);
+  const [stageWidth, setStageWidth] = useState(980);
+  const [stageHeight, setStageHeight] = useState(680);
+  const [viewportScale, setViewportScale] = useState(() => clamp(initialEditorState.viewportScale, MIN_VIEWPORT_SCALE, MAX_VIEWPORT_SCALE));
+  const [zoomInput, setZoomInput] = useState(() => String(Math.round(clamp(initialEditorState.viewportScale, MIN_VIEWPORT_SCALE, MAX_VIEWPORT_SCALE) * 100)));
   const [viewportOffset, setViewportOffset] = useState(() => initialEditorState.viewportOffset);
   const [isPanning, setIsPanning] = useState(false);
   const [venueSettings, setVenueSettings] = useState(() => initialEditorState.venueSettings);
@@ -306,18 +315,26 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
     node.style.cursor = 'grab';
 
     const observer = new ResizeObserver(([entry]) => {
-      setStageWidth(clamp(entry.contentRect.width, 420, DESIGN_WIDTH));
+      setStageWidth(Math.max(520, Math.floor(entry.contentRect.width)));
+      setStageHeight(Math.max(560, Math.floor(entry.contentRect.height)));
     });
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
 
   const scale = stageWidth / DESIGN_WIDTH;
-  const stageHeight = Math.min(760, DESIGN_HEIGHT * scale);
+  const effectiveScale = scale * viewportScale;
+  const gridSpacing = Math.max(24, GRID_SIZE * effectiveScale);
+  const gridOffsetX = ((viewportOffset.x % gridSpacing) + gridSpacing) % gridSpacing;
+  const gridOffsetY = ((viewportOffset.y % gridSpacing) + gridSpacing) % gridSpacing;
   const selectedZone = zones.find((zone) => zone.id === selectedZoneId) || null;
   const selectedStatic = staticElements.find((element) => element.id === selectedStaticId) || null;
   const isEditingZone = Boolean(selectedZone);
   const isEditingStatic = Boolean(selectedStatic);
+
+  useEffect(() => {
+    setZoomInput(String(Math.round(viewportScale * 100)));
+  }, [viewportScale]);
 
   useEffect(() => {
     const incomingLayout = parseLayoutInput(initialLayout) || {};
@@ -337,11 +354,12 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
     setSelectedZoneId(nextState.selectedZoneId);
     setSelectedStaticId(nextState.selectedStaticId);
     setDraft(nextState.draft);
-    setViewportScale(nextState.viewportScale);
+    setViewportScale(clamp(nextState.viewportScale, MIN_VIEWPORT_SCALE, MAX_VIEWPORT_SCALE));
     setViewportOffset(nextState.viewportOffset);
     setIsPanning(false);
     panStartRef.current = null;
     hydratedEventIdRef.current = eventId;
+    autoCenteredLayoutRef.current = '';
   }, [eventId, initialLayout, zones.length]);
 
   const payload = useMemo(() => ({
@@ -561,8 +579,22 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
     }
   };
 
+  const getViewportCenterPosition = () => {
+    const currentScale = scale * viewportScale;
+    if (!currentScale) return { x: 0.5, y: 0.5 };
+
+    return {
+      x: round(clamp(((stageWidth / 2 - viewportOffset.x) / currentScale) / DESIGN_WIDTH, -10, 10)),
+      y: round(clamp(((stageHeight / 2 - viewportOffset.y) / currentScale) / DESIGN_HEIGHT, -10, 10)),
+    };
+  };
+
   const addStaticElement = (type) => {
-    setStaticElements((current) => [...current, createStaticElement(type)]);
+    const nextElement = createStaticElement(type, getViewportCenterPosition());
+    setStaticElements((current) => [...current, nextElement]);
+    setSelectedStaticId(nextElement.id);
+    setSelectedZoneId('');
+    setDraft(createZoneFromDraft(defaultZoneDraft));
   };
 
   const setCanvasCursor = (value) => {
@@ -588,12 +620,13 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
   const isWorkspaceBackgroundTarget = (target) => {
     if (!target) return false;
     if (target === target.getStage?.()) return true;
-    return target.name?.() === 'workspace-background';
+    return target.name?.() === 'viewport-background';
   };
 
   const applyZoom = (nextViewportScale, pointer = { x: stageWidth / 2, y: stageHeight / 2 }) => {
+    const clampedScale = clamp(round(nextViewportScale), MIN_VIEWPORT_SCALE, MAX_VIEWPORT_SCALE);
     const oldScale = scale * viewportScale;
-    const newScale = scale * nextViewportScale;
+    const newScale = scale * clampedScale;
     const contentPoint = {
       x: (pointer.x - viewportOffset.x) / oldScale,
       y: (pointer.y - viewportOffset.y) / oldScale,
@@ -603,8 +636,15 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
       y: round(pointer.y - contentPoint.y * newScale),
     };
 
-    setViewportScale(nextViewportScale);
+    setViewportScale(clampedScale);
     setViewportOffset(nextPosition);
+  };
+
+  const commitZoomInput = () => {
+    const percent = Number(zoomInput);
+    const safePercent = Number.isFinite(percent) ? percent : Math.round(viewportScale * 100);
+    const nextViewportScale = clamp(safePercent / 100, MIN_VIEWPORT_SCALE, MAX_VIEWPORT_SCALE);
+    applyZoom(nextViewportScale);
   };
 
   const getRenderableBounds = () => {
@@ -648,31 +688,43 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
     return bounds;
   };
 
-  const handleCenterView = () => {
+  const centerMapLayout = useCallback(() => {
+    if (!stageWidth || !stageHeight) return;
+
     const bounds = getRenderableBounds();
     const contentCenter = {
       x: (bounds.minX + bounds.maxX) / 2,
       y: (bounds.minY + bounds.maxY) / 2,
     };
-    const delta = {
-      x: round((DESIGN_WIDTH / 2 - contentCenter.x) / DESIGN_WIDTH),
-      y: round((DESIGN_HEIGHT / 2 - contentCenter.y) / DESIGN_HEIGHT),
-    };
+    const contentWidth = Math.max(bounds.maxX - bounds.minX, 320);
+    const contentHeight = Math.max(bounds.maxY - bounds.minY, 240);
+    const fitScale = clamp(
+      Math.min((stageWidth - VIEWPORT_PADDING) / contentWidth, (stageHeight - VIEWPORT_PADDING) / contentHeight) / scale,
+      MIN_VIEWPORT_SCALE,
+      MAX_VIEWPORT_SCALE,
+    );
 
-    setStaticElements((current) => current.map((element) => ({
-      ...element,
-      x: round(Number(element.x || 0) + delta.x),
-      y: round(Number(element.y || 0) + delta.y),
-    })));
-    setZones((current) => current.map((zone) => ({
-      ...zone,
-      x: round(Number(zone.x || 0) + delta.x),
-      y: round(Number(zone.y || 0) + delta.y),
-    })));
-    setViewportScale(1);
-    setViewportOffset({ x: 0, y: 0 });
+    setViewportScale(round(fitScale));
+    setViewportOffset({
+      x: round(stageWidth / 2 - contentCenter.x * scale * fitScale),
+      y: round(stageHeight / 2 - contentCenter.y * scale * fitScale),
+    });
     setCanvasCursor('grab');
+  }, [scale, stageHeight, stageWidth, staticElements, zones]);
+
+  const handleCenterView = () => {
+    centerMapLayout();
   };
+
+  useEffect(() => {
+    if (!stageWidth || !stageHeight || (!staticElements.length && !zones.length)) return;
+
+    const layoutKey = String(eventId || 'draft-event');
+    if (autoCenteredLayoutRef.current === layoutKey) return;
+
+    centerMapLayout();
+    autoCenteredLayoutRef.current = layoutKey;
+  }, [centerMapLayout, eventId, stageHeight, stageWidth, staticElements, zones]);
 
   const handleWheel = (event) => {
     event.evt.preventDefault();
@@ -681,7 +733,7 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
     const pointer = stage?.getPointerPosition();
     if (!stage || !pointer) return;
 
-    const nextViewportScale = clamp(round(viewportScale + direction * 0.08), 0.55, 2.2);
+    const nextViewportScale = clamp(round(viewportScale + direction * 0.08), MIN_VIEWPORT_SCALE, MAX_VIEWPORT_SCALE);
     applyZoom(nextViewportScale, pointer);
   };
 
@@ -728,7 +780,7 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
 
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="grid gap-0 xl:grid-cols-[320px_1fr]">
+      <div className="grid min-h-[760px] gap-0 xl:grid-cols-[300px_1fr]">
         <aside className="border-b border-slate-200 bg-[linear-gradient(180deg,_#f8fafc,_#ffffff)] p-5 xl:border-b-0 xl:border-r">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -768,7 +820,7 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
 
               <div>
                 <FieldLabel>Static Elements</FieldLabel>
-                <div className="mt-2 grid grid-cols-3 gap-2">
+                <div className="mt-2 grid grid-cols-2 gap-2">
                   {staticElementOptions.map((element) => (
                     <button
                       key={element.type}
@@ -950,27 +1002,42 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
           )}
         </aside>
 
-        <div className="space-y-4 p-5">
+        <div className="space-y-4 bg-slate-50/70 p-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-violet-500">Design Canvas</p>
               <h3 className="mt-2 text-xl font-black text-slate-950">Interactive venue editor</h3>
               <p className="mt-1 text-sm text-slate-500">Drag zones and anchors. Click empty canvas to return to venue controls.</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => applyZoom(clamp(round(viewportScale - 0.12), 0.55, 2.2))}
+                onClick={() => applyZoom(clamp(round(viewportScale - ZOOM_STEP), MIN_VIEWPORT_SCALE, MAX_VIEWPORT_SCALE))}
                 className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-600 transition hover:border-violet-200 hover:text-violet-600"
               >
                 -
               </button>
-              <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500">
-                {Math.round(viewportScale * 100)}%
-              </span>
+              <label className="relative inline-flex items-center">
+                <input
+                  type="number"
+                  min={Math.round(MIN_VIEWPORT_SCALE * 100)}
+                  max={Math.round(MAX_VIEWPORT_SCALE * 100)}
+                  value={zoomInput}
+                  onChange={(event) => setZoomInput(event.target.value)}
+                  onBlur={commitZoomInput}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.currentTarget.blur();
+                    }
+                  }}
+                  className="h-10 w-20 rounded-full border border-slate-200 bg-white px-3 pr-7 text-center text-xs font-bold text-slate-600 outline-none transition focus:border-violet-300 focus:ring-4 focus:ring-violet-100"
+                  aria-label="Zoom percentage"
+                />
+                <span className="pointer-events-none absolute right-3 text-xs font-bold text-slate-400">%</span>
+              </label>
               <button
                 type="button"
-                onClick={() => applyZoom(clamp(round(viewportScale + 0.12), 0.55, 2.2))}
+                onClick={() => applyZoom(clamp(round(viewportScale + ZOOM_STEP), MIN_VIEWPORT_SCALE, MAX_VIEWPORT_SCALE))}
                 className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-600 transition hover:border-violet-200 hover:text-violet-600"
               >
                 +
@@ -994,7 +1061,10 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
             </div>
           </div>
 
-          <div ref={containerRef} className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950">
+          <div
+            ref={containerRef}
+            className="h-[68vh] min-h-[620px] overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-inner"
+          >
             <Stage
               width={stageWidth}
               height={stageHeight}
@@ -1042,17 +1112,47 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                 setZoneTooltip(null);
               }}
             >
-              <Layer x={viewportOffset.x} y={viewportOffset.y} scaleX={scale * viewportScale} scaleY={scale * viewportScale}>
+              <Layer>
                 <Rect
-                  name="workspace-background"
-                  width={DESIGN_WIDTH}
-                  height={DESIGN_HEIGHT}
-                  fill="#020617"
+                  name="viewport-background"
+                  width={stageWidth}
+                  height={stageHeight}
+                  fill="#f8fafc"
                   onClick={clearSelection}
                   onTap={clearSelection}
                 />
-                <Line points={[DESIGN_WIDTH / 2, 0, DESIGN_WIDTH / 2, DESIGN_HEIGHT]} stroke="#1e293b" strokeWidth={1} dash={[8, 10]} />
-                <Line points={[0, DESIGN_HEIGHT / 2, DESIGN_WIDTH, DESIGN_HEIGHT / 2]} stroke="#1e293b" strokeWidth={1} dash={[8, 10]} />
+                {Array.from({ length: Math.ceil(stageWidth / gridSpacing) + 2 }, (_, index) => (
+                  <Line
+                    key={`viewport-grid-x-${index}`}
+                    points={[gridOffsetX + (index - 1) * gridSpacing, 0, gridOffsetX + (index - 1) * gridSpacing, stageHeight]}
+                    stroke="#e2e8f0"
+                    strokeWidth={1}
+                    listening={false}
+                  />
+                ))}
+                {Array.from({ length: Math.ceil(stageHeight / gridSpacing) + 2 }, (_, index) => (
+                  <Line
+                    key={`viewport-grid-y-${index}`}
+                    points={[0, gridOffsetY + (index - 1) * gridSpacing, stageWidth, gridOffsetY + (index - 1) * gridSpacing]}
+                    stroke="#e2e8f0"
+                    strokeWidth={1}
+                    listening={false}
+                  />
+                ))}
+              </Layer>
+              <Layer x={viewportOffset.x} y={viewportOffset.y} scaleX={scale * viewportScale} scaleY={scale * viewportScale}>
+                <Rect
+                  x={0}
+                  y={0}
+                  width={DESIGN_WIDTH}
+                  height={DESIGN_HEIGHT}
+                  stroke="#cbd5e1"
+                  strokeWidth={1.5}
+                  dash={[12, 10]}
+                  listening={false}
+                />
+                <Line points={[DESIGN_WIDTH / 2, 0, DESIGN_WIDTH / 2, DESIGN_HEIGHT]} stroke="#94a3b8" strokeWidth={1.4} dash={[8, 10]} />
+                <Line points={[0, DESIGN_HEIGHT / 2, DESIGN_WIDTH, DESIGN_HEIGHT / 2]} stroke="#94a3b8" strokeWidth={1.4} dash={[8, 10]} />
 
                 {staticElements.map((element) => {
                   const point = denormalize(element);
@@ -1106,7 +1206,7 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                           align="center"
                         />
                       </Group>
-                      {isSelected ? (
+                      {false && isSelected ? (
                         <Group
                           x={element.width / 2 + 18}
                           y={-element.height / 2 - 18}
@@ -1181,9 +1281,6 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                           strokeWidth={2}
                           dash={[10, 8]}
                           opacity={0.85}
-                          shadowColor="#a78bfa"
-                          shadowBlur={18}
-                          shadowOpacity={0.3}
                         />
                       ) : null}
 
@@ -1217,7 +1314,7 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                         </Group>
                       ))}
 
-                      {isSelected ? (
+                      {false && isSelected ? (
                         <>
                           <Group
                             x={bounds.maxX + 18}
@@ -1245,9 +1342,10 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                 <Transformer
                   ref={transformerRef}
                   rotateEnabled
-                  resizeEnabled={Boolean(selectedStaticId)}
-                  enabledAnchors={selectedStaticId ? ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle-left', 'middle-right'] : []}
+                  resizeEnabled={false}
+                  enabledAnchors={[]}
                   keepRatio={false}
+                  ignoreStroke
                   boundBoxFunc={(oldBox, newBox) => {
                     if (!selectedStaticId) return oldBox;
                     if (Math.abs(newBox.width) < 32 || Math.abs(newBox.height) < 24) return oldBox;

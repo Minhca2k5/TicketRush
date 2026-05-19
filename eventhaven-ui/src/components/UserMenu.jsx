@@ -27,6 +27,8 @@ export function UserMenu() {
   const navigate = useNavigate();
   const fallbackUser = getCurrentUser();
   const user = profileUser || fallbackUser;
+  const profilePath = user?.role === 'ADMIN' ? '/admin/settings' : '/profile';
+  const settingsPath = user?.role === 'ADMIN' ? '/admin/settings' : '/settings';
 
   useEffect(() => {
     if (!fallbackUser) {
@@ -134,11 +136,11 @@ export function UserMenu() {
           <div className="dropdown-divider" />
 
           <div className="dropdown-items">
-            <button className="dropdown-item" onClick={() => { navigate('/profile'); setIsOpen(false); }}>
+            <button className="dropdown-item" onClick={() => { navigate(profilePath); setIsOpen(false); }}>
               <User size={18} />
               <span>Profile</span>
             </button>
-            <button className="dropdown-item" onClick={() => { navigate('/settings'); setIsOpen(false); }}>
+            <button className="dropdown-item" onClick={() => { navigate(settingsPath); setIsOpen(false); }}>
               <Settings size={18} />
               <span>Settings</span>
             </button>

@@ -28,7 +28,9 @@ public class ProjectDocumentRetriever {
             "dashboard", "revenue", "customer", "queue", "gateway", "auth", "venue", "zone",
             "postgres", "database", "concurrency", "lock", "locking", "transaction", "spring",
             "docker", "api", "frontend", "backend", "react", "java", "dat", "ve", "ghe",
-            "su", "kien", "dang", "nhap", "ky", "thong", "ke", "doanh", "thu"
+            "su", "kien", "dang", "nhap", "ky", "thong", "ke", "doanh", "thu",
+            "goi", "y", "de", "xuat", "nen", "di", "the", "thao", "sport", "sports",
+            "cuoi", "thang", "hom", "nay", "mai"
     );
     private static final Set<String> STOP_WORDS = Set.of(
             "a", "an", "and", "are", "as", "at", "be", "by", "do", "does", "for", "from",

@@ -8,6 +8,9 @@ export default function SeatMapRenderer({
   layout,
   liveSeats = [],
   selectedSeats = [],
+  canvasTheme = 'light',
+  fillViewport = false,
+  className = '',
   onToggleSeat = () => {},
   onChange,
   onSave,
@@ -28,6 +31,9 @@ export default function SeatMapRenderer({
       layout={layout}
       liveSeats={liveSeats}
       selectedSeats={selectedSeats}
+      canvasTheme={canvasTheme}
+      fillViewport={fillViewport}
+      className={className}
       onToggleSeat={onToggleSeat}
     />
   );

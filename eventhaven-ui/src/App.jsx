@@ -1,14 +1,20 @@
-import { BrowserRouter as Router, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, useLocation } from 'react-router-dom';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { ChatbotWidget } from './components/ChatbotWidget';
 import { AppRoutes } from './AppRoutes';
+import { getAuthRole, isAuthenticated } from './lib/auth';
 import './App.css';
 
 function AppShell() {
   const location = useLocation();
   const isAdminRoute = location.pathname.startsWith('/admin');
   const isAuthRoute = location.pathname === '/login' || location.pathname === '/register';
+  const isAdminSignedIn = isAuthenticated() && getAuthRole() === 'ADMIN';
+
+  if (isAdminSignedIn && !isAdminRoute && !isAuthRoute) {
+    return <Navigate to="/admin" replace />;
+  }
 
   if (isAdminRoute) {
     return (
