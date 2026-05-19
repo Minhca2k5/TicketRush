@@ -81,6 +81,16 @@ public class EventService {
     }
 
     @Transactional(readOnly = true)
+    public List<EventSummaryDTO> searchEvents(String keyword, String category, LocalDateTime fromDate, LocalDateTime toDate) {
+        String normalizedKeyword = (keyword == null || keyword.trim().isEmpty()) ? null : keyword.trim();
+        String normalizedCategory = (category == null || category.trim().isEmpty() || "all".equalsIgnoreCase(category.trim())) ? null : category.trim();
+
+        return eventRepository.searchEvents(normalizedKeyword, normalizedCategory, fromDate, toDate).stream()
+                .map(this::mapToSummaryDTO)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
     public DashboardSummaryDTO getDashboardSummary() {
         List<Seat> seats = seatRepository.findAll();
         long soldSeats = seats.stream().filter(seat -> "SOLD".equalsIgnoreCase(seat.getStatus())).count();

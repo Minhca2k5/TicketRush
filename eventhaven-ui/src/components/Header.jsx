@@ -116,48 +116,65 @@ export function Header() {
       </div>
 
       {menuOpen && (
-        <div className="border-t border-slate-100 bg-white px-4 py-4 lg:hidden">
-          <div className="space-y-2">
-            {showNavLinks && navItems.map((item) => (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-sm lg:hidden"
+            onClick={() => setMenuOpen(false)}
+          />
+          <div className="absolute left-0 right-0 top-full z-50 border-t border-slate-100 bg-white px-4 py-4 shadow-xl lg:hidden">
+            <div className="space-y-1">
+              {showNavLinks && navItems.map((item) => (
+                <Link
+                  key={item.label}
+                  to={item.to}
+                  onClick={() => setMenuOpen(false)}
+                  className="block rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  {item.label}
+                </Link>
+              ))}
               <Link
-                key={item.label}
-                to={item.to}
+                to="/events"
                 onClick={() => setMenuOpen(false)}
                 className="block rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
               >
-                {item.label}
+                All Events
               </Link>
-            ))}
-            {token && (
-              <>
-                <Link
-                  to="/orders"
-                  onClick={() => setMenuOpen(false)}
-                  className="block rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                >
-                  My Tickets
+              {token && (
+                <>
+                  <Link
+                    to="/orders"
+                    onClick={() => setMenuOpen(false)}
+                    className="block rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    My Tickets
+                  </Link>
+                  <Link
+                    to="/profile"
+                    onClick={() => setMenuOpen(false)}
+                    className="block rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    Profile
+                  </Link>
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <NotificationBell />
+                    <span className="text-sm font-medium text-slate-500">Notifications</span>
+                  </div>
+                </>
+              )}
+            </div>
+            {!token && (
+              <div className="mt-4 flex gap-3">
+                <Link to="/login" onClick={() => setMenuOpen(false)} className="flex-1 rounded-full border border-slate-200 px-4 py-3 text-center text-sm font-semibold text-slate-700">
+                  Login
                 </Link>
-                <Link
-                  to="/profile"
-                  onClick={() => setMenuOpen(false)}
-                  className="block rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                >
-                  Profile
+                <Link to="/register" onClick={() => setMenuOpen(false)} className="flex-1 rounded-full bg-violet-600 px-4 py-3 text-center text-sm font-semibold text-white">
+                  Register
                 </Link>
-              </>
+              </div>
             )}
           </div>
-          {!token && (
-            <div className="mt-4 flex gap-3">
-              <Link to="/login" onClick={() => setMenuOpen(false)} className="flex-1 rounded-full border border-slate-200 px-4 py-3 text-center text-sm font-semibold text-slate-700">
-                Login
-              </Link>
-              <Link to="/register" onClick={() => setMenuOpen(false)} className="flex-1 rounded-full bg-violet-600 px-4 py-3 text-center text-sm font-semibold text-white">
-                Register
-              </Link>
-            </div>
-          )}
-        </div>
+        </>
       )}
     </header>
   );

@@ -29,3 +29,15 @@ export async function releaseSeat(eventId, seatId, holderId) {
   });
   return response.data?.data || response.data;
 }
+
+export async function searchEvents({ q, category, from, to, sort } = {}) {
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (category && category !== 'all') params.set('category', category);
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  if (sort) params.set('sort', sort);
+
+  const response = await api.get(`/events/search?${params.toString()}`);
+  return response.data?.data || response.data || [];
+}

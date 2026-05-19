@@ -33,21 +33,45 @@ public class BookingService {
     @Value("${app.event-service-url}")
     private String eventServiceUrl;
 
+    private static final int MAX_LOCK_RETRIES = 3;
+    private static final long RETRY_DELAY_MS = 200;
+
     public SeatDTO lockSeat(Long eventId, Long seatId, String holderId, Integer holdMinutes) {
         String url = eventServiceUrl + "/api/events/" + eventId + "/seats/" + seatId + "/lock";
         SeatLockRequestDTO request = new SeatLockRequestDTO(holderId, holdMinutes);
-        
-        ResponseEntity<ApiResponse<SeatDTO>> response = restTemplate.exchange(
-                url,
-                HttpMethod.POST,
-                new HttpEntity<>(request),
-                new ParameterizedTypeReference<ApiResponse<SeatDTO>>() {}
-        );
-        
-        if (response.getBody() == null || !"SUCCESS".equalsIgnoreCase(response.getBody().getStatus())) {
-            throw new RuntimeException("Failed to lock seat in event-service");
+
+        RuntimeException lastException = null;
+        for (int attempt = 1; attempt <= MAX_LOCK_RETRIES; attempt++) {
+            try {
+                ResponseEntity<ApiResponse<SeatDTO>> response = restTemplate.exchange(
+                        url,
+                        HttpMethod.POST,
+                        new HttpEntity<>(request),
+                        new ParameterizedTypeReference<ApiResponse<SeatDTO>>() {}
+                );
+
+                if (response.getBody() == null || !"SUCCESS".equalsIgnoreCase(response.getBody().getStatus())) {
+                    throw new RuntimeException("Failed to lock seat in event-service");
+                }
+                return response.getBody().getData();
+            } catch (org.springframework.web.client.HttpClientErrorException.Conflict ex) {
+                // Seat conflict — no point retrying
+                throw ex;
+            } catch (org.springframework.web.client.HttpClientErrorException ex) {
+                throw ex;
+            } catch (org.springframework.web.client.ResourceAccessException ex) {
+                lastException = new RuntimeException("Event service is temporarily unavailable", ex);
+                if (attempt < MAX_LOCK_RETRIES) {
+                    try { Thread.sleep(RETRY_DELAY_MS * attempt); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                }
+            } catch (RuntimeException ex) {
+                lastException = ex;
+                if (attempt < MAX_LOCK_RETRIES) {
+                    try { Thread.sleep(RETRY_DELAY_MS * attempt); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                }
+            }
         }
-        return response.getBody().getData();
+        throw lastException != null ? lastException : new RuntimeException("Failed to lock seat after retries");
     }
 
     public SeatDTO releaseSeat(Long eventId, Long seatId, String holderId) {

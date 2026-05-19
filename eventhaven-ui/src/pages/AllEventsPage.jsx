@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
-import { CalendarDays, ChevronLeft, ChevronRight, ImageOff, MapPin, Search, Ticket } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ImageOff, MapPin, Search, SlidersHorizontal, Ticket, X } from 'lucide-react';
 import api from '../services/api';
+import { searchEvents } from '../services/eventService';
 import { getEventPriceInfo } from '../lib/event-pricing';
 import { isEventBookable } from '../lib/event-status';
 
 const PAGE_SIZE = 24;
+const DEBOUNCE_MS = 400;
 
 const CATEGORY_FILTERS = [
   { id: 'all', label: 'All Events' },
@@ -14,6 +16,12 @@ const CATEGORY_FILTERS = [
   { id: 'sports', label: 'Sports' },
   { id: 'festival', label: 'Festival' },
   { id: 'conference', label: 'Conference' },
+];
+
+const SORT_OPTIONS = [
+  { id: 'date', label: 'Date (Soonest)' },
+  { id: 'name', label: 'Name (A-Z)' },
+  { id: 'price', label: 'Price (Low → High)' },
 ];
 
 const inferCategory = (event) => {
@@ -138,12 +146,38 @@ export default function AllEventsPage() {
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('search') || '');
   const [activeCategory, setActiveCategory] = useState(() => normalizeCategory(searchParams.get('category') || 'all') || 'all');
   const [currentPage, setCurrentPage] = useState(() => Math.max(Number(searchParams.get('page') || 1), 1));
+  const [sortBy, setSortBy] = useState(() => searchParams.get('sort') || 'date');
+  const [dateFrom, setDateFrom] = useState(() => searchParams.get('from') || '');
+  const [dateTo, setDateTo] = useState(() => searchParams.get('to') || '');
+  const [showFilters, setShowFilters] = useState(false);
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+  const debounceRef = useRef(null);
 
-  const loadEvents = useCallback(async () => {
+  const loadEvents = useCallback(async (params = {}) => {
     setLoading(true);
     try {
-      const response = await api.get('/events');
-      const payload = response.data?.data?.content || response.data?.data || response.data || [];
+      const searchQ = params.q ?? searchQuery;
+      const searchCat = params.category ?? activeCategory;
+      const searchSort = params.sort ?? sortBy;
+      const searchFrom = params.from ?? dateFrom;
+      const searchTo = params.to ?? dateTo;
+
+      // Use server-side search if any filters are active
+      const hasFilters = searchQ || (searchCat && searchCat !== 'all') || searchFrom || searchTo;
+      let payload;
+
+      if (hasFilters) {
+        payload = await searchEvents({
+          q: searchQ || undefined,
+          category: searchCat || undefined,
+          from: searchFrom ? new Date(searchFrom).toISOString() : undefined,
+          to: searchTo ? new Date(searchTo + 'T23:59:59').toISOString() : undefined,
+          sort: searchSort,
+        });
+      } else {
+        const response = await api.get('/events');
+        payload = response.data?.data?.content || response.data?.data || response.data || [];
+      }
 
       setEvents(Array.isArray(payload) ? payload : []);
       setLoadError('');
@@ -153,7 +187,7 @@ export default function AllEventsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [searchQuery, activeCategory, sortBy, dateFrom, dateTo]);
 
   useEffect(() => {
     loadEvents();
@@ -163,11 +197,56 @@ export default function AllEventsPage() {
     setSearchQuery(searchParams.get('search') || '');
     setActiveCategory(normalizeCategory(searchParams.get('category') || 'all') || 'all');
     setCurrentPage(Math.max(Number(searchParams.get('page') || 1), 1));
+    setSortBy(searchParams.get('sort') || 'date');
+    setDateFrom(searchParams.get('from') || '');
+    setDateTo(searchParams.get('to') || '');
   }, [location.search]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [currentPage]);
+
+  // Debounced search
+  const handleSearchChange = (event) => {
+    const value = event.target.value;
+    setSearchQuery(value);
+    setCurrentPage(1);
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      loadEvents({ q: value });
+    }, DEBOUNCE_MS);
+  };
+
+  const handleCategoryChange = (categoryId) => {
+    setActiveCategory(categoryId);
+    setCurrentPage(1);
+    loadEvents({ category: categoryId });
+  };
+
+  const handleSortChange = (sortId) => {
+    setSortBy(sortId);
+    setSortDropdownOpen(false);
+    loadEvents({ sort: sortId });
+  };
+
+  const handleDateChange = (field, value) => {
+    if (field === 'from') setDateFrom(value);
+    else setDateTo(value);
+    const nextFrom = field === 'from' ? value : dateFrom;
+    const nextTo = field === 'to' ? value : dateTo;
+    loadEvents({ from: nextFrom, to: nextTo });
+  };
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setActiveCategory('all');
+    setSortBy('date');
+    setDateFrom('');
+    setDateTo('');
+    setCurrentPage(1);
+    loadEvents({ q: '', category: 'all', sort: 'date', from: '', to: '' });
+  };
 
   const normalizedEvents = useMemo(() => (
     events.filter((event) => isEventBookable(event)).map((event) => ({
@@ -176,52 +255,31 @@ export default function AllEventsPage() {
     }))
   ), [events]);
 
-  const filteredEvents = useMemo(() => (
-    normalizedEvents.filter((event) => {
-      const normalizedSearch = searchQuery.trim().toLowerCase();
-      const searchableText = `${event.name || ''} ${event.description || ''} ${resolveEventLocation(event)}`.toLowerCase();
-      const matchesSearch = !normalizedSearch || searchableText.includes(normalizedSearch);
-      const matchesCategory = activeCategory === 'all' || normalizeCategory(event.category) === activeCategory;
-      return matchesSearch && matchesCategory;
-    })
-  ), [normalizedEvents, searchQuery, activeCategory]);
-
-  const totalPages = Math.max(Math.ceil(filteredEvents.length / PAGE_SIZE), 1);
+  const totalPages = Math.max(Math.ceil(normalizedEvents.length / PAGE_SIZE), 1);
   const safePage = Math.min(currentPage, totalPages);
-  const pageEvents = filteredEvents.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const pageEvents = normalizedEvents.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
-  const handleSearchChange = (event) => {
-    setSearchQuery(event.target.value);
-    setCurrentPage(1);
-  };
-
-  const handleCategoryChange = (categoryId) => {
-    setActiveCategory(categoryId);
-    setCurrentPage(1);
-  };
+  const hasActiveFilters = searchQuery || activeCategory !== 'all' || dateFrom || dateTo || sortBy !== 'date';
 
   const updatePage = useCallback((nextPage) => {
     setCurrentPage(nextPage);
     const params = new URLSearchParams(searchParams);
-    if (searchQuery.trim()) {
-      params.set('search', searchQuery.trim());
-    } else {
-      params.delete('search');
-    }
-    if (activeCategory !== 'all') {
-      params.set('category', activeCategory);
-    } else {
-      params.delete('category');
-    }
+    if (searchQuery.trim()) params.set('search', searchQuery.trim()); else params.delete('search');
+    if (activeCategory !== 'all') params.set('category', activeCategory); else params.delete('category');
+    if (sortBy !== 'date') params.set('sort', sortBy); else params.delete('sort');
+    if (dateFrom) params.set('from', dateFrom); else params.delete('from');
+    if (dateTo) params.set('to', dateTo); else params.delete('to');
     params.set('page', String(nextPage));
     setSearchParams(params);
-  }, [activeCategory, searchParams, searchQuery, setSearchParams]);
+  }, [activeCategory, searchParams, searchQuery, setSearchParams, sortBy, dateFrom, dateTo]);
 
   useEffect(() => {
     if (currentPage !== safePage) {
       setCurrentPage(safePage);
     }
   }, [currentPage, safePage]);
+
+  const currentSortLabel = SORT_OPTIONS.find((opt) => opt.id === sortBy)?.label || 'Date';
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(139,92,246,0.16),_transparent_28%),linear-gradient(180deg,_#f8faff_0%,_#eef2ff_100%)]">
@@ -231,16 +289,18 @@ export default function AllEventsPage() {
             <p className="text-sm font-semibold uppercase tracking-[0.3em] text-violet-500">All Events</p>
             <h1 className="mt-2 text-4xl font-black tracking-tight text-slate-950">Explore every live moment</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
-              Browse the full TicketRush catalog with search, category filters, and paginated results.
+              Browse the full TicketRush catalog with search, category filters, date range, and sorting.
             </p>
           </div>
           <p className="rounded-full bg-white/85 px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200">
-            {filteredEvents.length} event(s)
+            {normalizedEvents.length} event(s)
           </p>
         </section>
 
+        {/* Search & Filters Panel */}
         <section className="mt-8 rounded-[28px] border border-slate-200/80 bg-white/90 p-4 shadow-md shadow-slate-200/70 backdrop-blur md:p-6">
           <div className="flex flex-col gap-4">
+            {/* Search Bar */}
             <div className="relative">
               <Search className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-violet-500" size={22} />
               <input
@@ -249,11 +309,20 @@ export default function AllEventsPage() {
                 placeholder="Tìm kiếm sự kiện, nghệ sĩ hoặc địa điểm..."
                 className="h-14 w-full rounded-full border border-slate-200 bg-slate-50 pl-14 pr-5 text-base font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-100"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => { setSearchQuery(''); loadEvents({ q: '' }); }}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                >
+                  <X size={18} />
+                </button>
+              )}
             </div>
 
+            {/* Category + Sort + Filter Toggle */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Categories</p>
-              <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:justify-end sm:overflow-visible sm:pb-0">
+              <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
                 {CATEGORY_FILTERS.map((categoryItem) => {
                   const isActiveCategory = activeCategory === categoryItem.id;
                   return (
@@ -272,13 +341,106 @@ export default function AllEventsPage() {
                   );
                 })}
               </div>
+
+              <div className="flex items-center gap-2">
+                {/* Sort Dropdown */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setSortDropdownOpen((v) => !v)}
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-violet-200 hover:text-violet-700"
+                  >
+                    {currentSortLabel}
+                    <ChevronDown size={14} />
+                  </button>
+                  {sortDropdownOpen && (
+                    <div className="absolute right-0 top-full z-20 mt-2 w-48 rounded-2xl border border-slate-200 bg-white py-2 shadow-xl">
+                      {SORT_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => handleSortChange(opt.id)}
+                          className={`block w-full px-4 py-2 text-left text-sm font-medium transition ${
+                            sortBy === opt.id
+                              ? 'bg-violet-50 text-violet-700 font-bold'
+                              : 'text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Advanced Filters Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setShowFilters((v) => !v)}
+                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold shadow-sm transition ${
+                    showFilters || dateFrom || dateTo
+                      ? 'border-violet-300 bg-violet-50 text-violet-700'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-violet-200'
+                  }`}
+                >
+                  <SlidersHorizontal size={14} />
+                  <span className="hidden sm:inline">Filters</span>
+                </button>
+
+                {/* Clear All */}
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="rounded-full border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-100"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
+
+            {/* Date Range Filters */}
+            {showFilters && (
+              <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 sm:flex-row sm:items-end">
+                <div className="flex-1">
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-400">From Date</label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => handleDateChange('from', e.target.value)}
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-300 focus:ring-4 focus:ring-violet-100"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-400">To Date</label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => handleDateChange('to', e.target.value)}
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-300 focus:ring-4 focus:ring-violet-100"
+                  />
+                </div>
+                {(dateFrom || dateTo) && (
+                  <button
+                    type="button"
+                    onClick={() => { setDateFrom(''); setDateTo(''); loadEvents({ from: '', to: '' }); }}
+                    className="h-11 shrink-0 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-500 transition hover:bg-slate-100"
+                  >
+                    Clear dates
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </section>
 
         {loading ? (
-          <div className="mt-8 rounded-[28px] border border-slate-200 bg-white/80 p-10 text-center text-slate-500 shadow-sm">
-            Loading events...
+          <div className="mt-8 flex justify-center rounded-[28px] border border-slate-200 bg-white/80 p-10 shadow-sm">
+            <div className="flex flex-col items-center gap-4">
+              <div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+              <p className="text-sm font-medium text-slate-500">Searching events...</p>
+            </div>
           </div>
         ) : (
           <>
@@ -287,7 +449,7 @@ export default function AllEventsPage() {
                 <span>{loadError}</span>
                 <button
                   type="button"
-                  onClick={loadEvents}
+                  onClick={() => loadEvents()}
                   className="inline-flex w-fit items-center rounded-full border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
                 >
                   Retry now
@@ -295,7 +457,7 @@ export default function AllEventsPage() {
               </div>
             ) : null}
 
-            <div className="mt-8 grid items-stretch gap-6 md:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-8 grid items-stretch gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {pageEvents.length ? (
                 pageEvents.map((event) => <EventCard key={event.id} event={event} />)
               ) : (
@@ -305,7 +467,7 @@ export default function AllEventsPage() {
               )}
             </div>
 
-            {filteredEvents.length > PAGE_SIZE && (
+            {normalizedEvents.length > PAGE_SIZE && (
               <div className="mt-10 flex flex-col items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm sm:flex-row">
                 <p className="text-sm font-semibold text-slate-500">
                   Page {safePage} of {totalPages}

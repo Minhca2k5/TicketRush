@@ -12,9 +12,12 @@ import com.ticketrush.eventservice.dto.SeatPurchaseRequestDTO;
 import com.ticketrush.eventservice.dto.SeatReleaseRequestDTO;
 import com.ticketrush.eventservice.service.EventService;
 import com.ticketrush.eventservice.service.SeatService;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 
 @RestController
@@ -32,6 +35,26 @@ public class EventController {
     @GetMapping
     public ResponseEntity<ApiResponse<List<EventSummaryDTO>>> getAllEvents() {
         return ResponseEntity.ok(ApiResponse.success("Events fetched successfully", eventService.getAllEvents()));
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<ApiResponse<List<EventSummaryDTO>>> searchEvents(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+            @RequestParam(required = false, defaultValue = "date") String sort
+    ) {
+        List<EventSummaryDTO> results = eventService.searchEvents(q, category, from, to);
+
+        switch (sort) {
+            case "name" -> results.sort(Comparator.comparing(e -> e.getName() != null ? e.getName().toLowerCase() : ""));
+            case "price" -> results.sort(Comparator.comparing(e -> e.getMinPrice() != null ? e.getMinPrice() : java.math.BigDecimal.ZERO));
+            case "date" -> {} // Already sorted by date from query
+            default -> {}
+        }
+
+        return ResponseEntity.ok(ApiResponse.success("Search results fetched successfully", results));
     }
 
     @GetMapping("/dashboard")

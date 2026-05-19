@@ -15,7 +15,8 @@ import { readUserSettings } from "../lib/userSettings";
 import SeatMapRenderer from "./seat-map/SeatMapRenderer";
 
 const HOLD_MINUTES = 10;
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_IDLE_MS = 5000;
+const POLL_INTERVAL_ACTIVE_MS = 3000;
 const HOLDER_STORAGE_KEY = "ticketrush-seat-holder";
 const SELECTION_STORAGE_PREFIX = "ticketrush-seat-selection";
 const CONFLICT_TOAST_MESSAGE = "Ghế này vừa có người đặt, vui lòng chọn ghế khác";
@@ -136,6 +137,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
   const [userSettings, setUserSettings] = useState(null);
   const [reminderShownFor, setReminderShownFor] = useState(null);
   const [orderId, setOrderId] = useState(null);
+  const [changedSeatIds, setChangedSeatIds] = useState([]);
   const holderIdRef = useRef(null);
   const selectedSeatsRef = useRef([]);
   const releaseExpiredInFlightRef = useRef(false);
@@ -288,16 +290,34 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
     };
 
     guardedSync();
+    // Dynamic polling: faster when user has selected seats
+    const pollMs = selectedSeatsRef.current.length > 0 ? POLL_INTERVAL_ACTIVE_MS : POLL_INTERVAL_IDLE_MS;
     const interval = window.setInterval(() => {
       guardedSync({ silentError: true }).catch(() => {});
-    }, POLL_INTERVAL_MS);
+    }, pollMs);
     return () => {
       active = false;
       window.clearInterval(interval);
     };
-  }, [eventId, syncSeatStatus]);
+  }, [eventId, syncSeatStatus, selectedSeats.length]);
 
   useEffect(() => {
+    // Detect changed seats for visual flash
+    setChangedSeatIds((prev) => {
+      const changed = liveSeats
+        .filter((seat) => {
+          const oldSeat = selectedSeatsRef.current.find((s) => s.id === seat.id);
+          return oldSeat && oldSeat.status !== seat.status;
+        })
+        .map((s) => s.id);
+      return changed;
+    });
+    // Clear flash after animation
+    if (changedSeatIds.length) {
+      const timer = setTimeout(() => setChangedSeatIds([]), 1200);
+      return () => clearTimeout(timer);
+    }
+
     setSelectedSeats((previous) => {
       const retainableSeatIds = new Set(
         liveSeats
@@ -540,8 +560,9 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
       heldByCurrentUser: selectedSeats.some((selectedSeat) => String(selectedSeat.id) === String(seat.id))
         || (seat.status === "LOCKED" && seat.lockHolder === holderIdRef.current),
       pending: seatActionInFlight.includes(seat.id),
+      justChanged: changedSeatIds.includes(seat.id),
     }))
-  ), [liveSeats, seatActionInFlight, selectedSeats]);
+  ), [liveSeats, seatActionInFlight, selectedSeats, changedSeatIds]);
   const syncLabel = useMemo(() => new Date(lastSyncAt).toLocaleTimeString(), [lastSyncAt]);
   const hasSeatInventory = seats.length > 0;
   const hasCoordinateLayout = Array.isArray(coordinateLayout?.zones) && coordinateLayout.zones.length > 0;

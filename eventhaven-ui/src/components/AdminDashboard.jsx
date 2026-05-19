@@ -4,12 +4,14 @@ import {
   CalendarDays,
   FileBarChart2,
   LifeBuoy,
+  Menu,
   Search,
   Settings,
   ShieldCheck,
   Ticket,
   TrendingUp,
   Users,
+  X,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../services/api';
@@ -58,6 +60,7 @@ export default function AdminDashboard() {
   const [authSummary, setAuthSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [summaryError, setSummaryError] = useState('');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -146,54 +149,77 @@ export default function AdminDashboard() {
   const malePercent = demographicTotal ? Math.round(((authSummary?.maleCount || 0) / demographicTotal) * 100) : 0;
   const femalePercent = demographicTotal ? 100 - malePercent : 0;
 
+  const renderSidebarContent = () => (
+    <>
+      <div className="px-5 py-7">
+        <p className="px-4 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Main</p>
+        <div className="mt-4 space-y-2">
+          {sidebarMain.map(({ label, icon: Icon, to }) => {
+            const isActive = to ? location.pathname.startsWith(to) : false;
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={() => { if (to) navigate(to); setMobileSidebarOpen(false); }}
+                className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
+                  isActive ? 'bg-violet-50 text-violet-700 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.35)]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <Icon size={17} />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="mt-auto border-t border-[#e8edf4] px-5 py-7">
+        <p className="px-4 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Support</p>
+        <div className="mt-4 space-y-2">
+          {sidebarSupport.map(({ label, icon: Icon, to }) => {
+            const isActive = location.pathname.startsWith(to);
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={() => { navigate(to); setMobileSidebarOpen(false); }}
+                className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
+                  isActive ? 'bg-violet-50 text-violet-700 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.35)]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <Icon size={17} />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <div className="min-h-screen bg-[#f4f7fb] font-sans text-slate-900">
-      <div className="grid min-h-screen lg:grid-cols-[300px_minmax(0,1fr)]">
-        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] self-start flex-col overflow-y-auto border-r border-[#dde6f0] bg-white lg:flex">
-          <div className="px-5 py-7">
-            <p className="px-4 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Main</p>
-            <div className="mt-4 space-y-2">
-              {sidebarMain.map(({ label, icon: Icon, to }) => {
-                const isActive = to ? location.pathname.startsWith(to) : false;
-                return (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => to && navigate(to)}
-                    className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
-                      isActive ? 'bg-violet-50 text-violet-700 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.35)]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                    }`}
-                  >
-                    <Icon size={17} />
-                    <span>{label}</span>
-                  </button>
-                );
-              })}
+      {/* Mobile sidebar */}
+      {mobileSidebarOpen && (
+        <>
+          <div className="admin-sidebar-overlay lg:hidden" onClick={() => setMobileSidebarOpen(false)} />
+          <div className="admin-sidebar-mobile lg:hidden">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <span className="text-lg font-black text-slate-900">Menu</span>
+              <button type="button" onClick={() => setMobileSidebarOpen(false)} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100">
+                <X size={20} />
+              </button>
             </div>
+            {renderSidebarContent()}
           </div>
+        </>
+      )}
 
-          <div className="mt-auto border-t border-[#e8edf4] px-5 py-7">
-            <p className="px-4 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Support</p>
-            <div className="mt-4 space-y-2">
-              {sidebarSupport.map(({ label, icon: Icon, to }) => {
-                const isActive = location.pathname.startsWith(to);
-                return (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => navigate(to)}
-                    className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
-                      isActive ? 'bg-violet-50 text-violet-700 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.35)]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                    }`}
-                  >
-                    <Icon size={17} />
-                    <span>{label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+      <div className="grid min-h-screen lg:grid-cols-[300px_minmax(0,1fr)]">
+        {/* Desktop sidebar */}
+        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] self-start flex-col overflow-y-auto border-r border-[#dde6f0] bg-white lg:flex">
+          {renderSidebarContent()}
         </aside>
+
 
         <div className="min-w-0">
           <header className="hidden">
@@ -215,11 +241,20 @@ export default function AdminDashboard() {
             </div>
           </header>
 
-          <main className="px-6 py-6 lg:px-8">
+          <main className="px-4 py-6 sm:px-6 lg:px-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setMobileSidebarOpen(true)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 shadow-sm lg:hidden"
+                >
+                  <Menu size={18} />
+                </button>
               <div>
                 <h1 className="text-3xl font-black tracking-tight text-slate-950">Event Overview Dashboard</h1>
                 <p className="mt-2 text-sm text-slate-500">Track event inventory, users, and profile demographics from the live services.</p>
+              </div>
               </div>
               <button
                 onClick={() => navigate('/admin/events')}
