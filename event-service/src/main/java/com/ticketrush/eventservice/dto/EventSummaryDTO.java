@@ -28,4 +28,6 @@ public class EventSummaryDTO {
     private int availableSeats;
     private int lockedSeats;
     private int soldSeats;
+    private double averageRating;
+    private long reviewCount;
 }

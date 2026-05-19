@@ -19,11 +19,13 @@ export async function releaseSeat(eventId, seatId, holderId) {
   return response.data?.data || response.data;
 }
 
-export async function checkout(eventId, seatIds, holderId) {
+export async function checkout(eventId, seatIds, holderId, customer = {}) {
   const response = await api.post('/booking/checkout', {
     eventId,
     seatIds,
     holderId,
+    customerEmail: customer.email,
+    customerName: customer.name,
   });
   return response.data?.data || response.data;
 }

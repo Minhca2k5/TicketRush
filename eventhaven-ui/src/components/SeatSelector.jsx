@@ -135,6 +135,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
   const [checkoutSuccess, setCheckoutSuccess] = useState(false);
   const [showHoldExpiredModal, setShowHoldExpiredModal] = useState(false);
   const [userSettings, setUserSettings] = useState(null);
+  const [customerProfile, setCustomerProfile] = useState(null);
   const [reminderShownFor, setReminderShownFor] = useState(null);
   const [orderId, setOrderId] = useState(null);
   const [changedSeatIds, setChangedSeatIds] = useState([]);
@@ -172,6 +173,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
     getProfile()
       .then((profile) => {
         if (!isActive) return;
+        setCustomerProfile(profile);
         setUserSettings(readUserSettings(profile));
         const accountHolderId = getAccountHolderId(profile);
         if (!accountHolderId) return;
@@ -531,7 +533,10 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
     setIsCheckoutLoading(true);
     try {
       const seatIds = selectedSeats.map(s => s.id);
-      const order = await checkout(eventId, seatIds, holderIdRef.current);
+      const order = await checkout(eventId, seatIds, holderIdRef.current, {
+        email: customerProfile?.email,
+        name: customerProfile?.username,
+      });
       setOrderId(order.id);
       setCheckoutSuccess(true);
       setSelectedSeats([]);
@@ -544,7 +549,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
     } finally {
       setIsCheckoutLoading(false);
     }
-  }, [eventId, selectedSeats, syncSeatStatus]);
+  }, [customerProfile, eventId, selectedSeats, syncSeatStatus]);
 
   const total = useMemo(
     () => selectedSeats.reduce((sum, seat) => sum + Number(seat.price || 0), 0),

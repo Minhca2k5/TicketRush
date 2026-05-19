@@ -23,6 +23,7 @@ import com.ticketrush.eventservice.entity.Venue;
 import com.ticketrush.eventservice.entity.VenueZone;
 import com.ticketrush.eventservice.repository.EventPriceTierRepository;
 import com.ticketrush.eventservice.repository.EventRepository;
+import com.ticketrush.eventservice.repository.EventReviewRepository;
 import com.ticketrush.eventservice.repository.PriceTierRepository;
 import com.ticketrush.eventservice.repository.SeatRepository;
 import com.ticketrush.eventservice.repository.VenueRepository;
@@ -56,6 +57,7 @@ public class EventService {
     private final VenueRepository venueRepository;
     private final EventPriceTierRepository eventPriceTierRepository;
     private final PriceTierRepository priceTierRepository;
+    private final EventReviewRepository eventReviewRepository;
     private final SeatService seatService;
     private final ObjectMapper objectMapper;
 
@@ -587,6 +589,8 @@ public class EventService {
         dto.setAvailableSeats(countByStatus(seats, "AVAILABLE"));
         dto.setLockedSeats(countByStatus(seats, "LOCKED", "WAITING", "HELD", "RESERVED"));
         dto.setSoldSeats(countByStatus(seats, "BOOKED", "SOLD", "UNAVAILABLE"));
+        dto.setAverageRating(resolveAverageRating(event.getId()));
+        dto.setReviewCount(eventReviewRepository.countByEventId(event.getId()));
         return dto;
     }
 
@@ -690,7 +694,17 @@ public class EventService {
         dto.setPriceTiers(priceTierDTOs);
         dto.setSeats(seatDTOs);
         dto.setSeatLayout(readSeatLayout(event.getSeatLayoutJson()));
+        dto.setAverageRating(resolveAverageRating(event.getId()));
+        dto.setReviewCount(eventReviewRepository.countByEventId(event.getId()));
         return dto;
+    }
+
+    private double resolveAverageRating(Long eventId) {
+        Double average = eventReviewRepository.getAverageRatingByEventId(eventId);
+        if (average == null) {
+            return 0;
+        }
+        return Math.round(average * 10.0) / 10.0;
     }
 
     private String writeSeatLayout(JsonNode seatLayout) {

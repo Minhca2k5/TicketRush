@@ -1,4 +1,4 @@
-import { CalendarDays, MapPin, Sparkles } from 'lucide-react';
+import { CalendarDays, MapPin, Sparkles, Star } from 'lucide-react';
 
 export function EventHeader({ event }) {
   if (!event) return null;
@@ -15,6 +15,10 @@ export function EventHeader({ event }) {
           <div className="mt-6 flex flex-wrap gap-5 text-sm text-slate-600">
             <span className="inline-flex items-center gap-2"><CalendarDays size={16} className="text-violet-500" />{new Date(event.startTime).toLocaleString()}</span>
             <span className="inline-flex items-center gap-2"><MapPin size={16} className="text-violet-500" />{event.location}</span>
+            <span className="inline-flex items-center gap-2">
+              <Star size={16} className="fill-amber-400 text-amber-400" />
+              {Number(event.averageRating || 0).toFixed(1)} ({event.reviewCount || 0})
+            </span>
           </div>
           <p className="mt-6 max-w-xl text-sm leading-7 text-slate-500">
             Select your seats, review your order, and complete checkout before your reservation timer expires.

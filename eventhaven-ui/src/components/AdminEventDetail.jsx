@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, CalendarDays, MapPin, Ticket, UserRound } from 'lucide-react';
+import { ArrowLeft, CalendarDays, MapPin, MessageSquare, Star, Ticket, UserRound } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import AdminSeatMapPreview from './admin/AdminSeatMapPreview';
@@ -47,6 +47,7 @@ export default function AdminEventDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [event, setEvent] = useState(null);
+  const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -54,10 +55,15 @@ export default function AdminEventDetail() {
 
     const load = async () => {
       try {
-        const response = await api.get(`/events/${id}`);
-        const payload = response.data?.data || response.data;
+        const [eventResponse, reviewsResponse] = await Promise.all([
+          api.get(`/events/${id}`),
+          api.get(`/events/${id}/reviews`).catch(() => ({ data: { data: [] } })),
+        ]);
+        const payload = eventResponse.data?.data || eventResponse.data;
+        const reviewPayload = reviewsResponse.data?.data || reviewsResponse.data || [];
         if (!ignore) {
           setEvent(payload);
+          setReviews(Array.isArray(reviewPayload) ? reviewPayload : []);
         }
       } catch {
         if (!ignore) {
@@ -155,6 +161,17 @@ export default function AdminEventDetail() {
                 <p className="mt-3 text-sm text-slate-700">Price tiers: {summary.tiers}</p>
                 <p className="mt-1 text-sm text-slate-500">Capacity: {summary.capacity}</p>
               </div>
+
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5 md:col-span-2">
+                <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  <Star size={16} className="fill-amber-400 text-amber-400" />
+                  Reviews
+                </div>
+                <p className="mt-3 text-sm text-slate-700">
+                  Average rating: {Number(event.averageRating || 0).toFixed(1)} / 5
+                </p>
+                <p className="mt-1 text-sm text-slate-500">Total reviews: {event.reviewCount || reviews.length}</p>
+              </div>
             </div>
           </div>
 
@@ -165,6 +182,43 @@ export default function AdminEventDetail() {
               className="h-full w-full object-cover"
             />
           </div>
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-[32px] border border-[#dfe7f2] bg-white p-8 shadow-[0_16px_48px_rgba(15,23,42,0.05)]">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-black text-slate-950">Review Summary</h2>
+            <p className="mt-2 text-sm text-slate-500">Latest attendee feedback for this event.</p>
+          </div>
+          <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-4 py-2 text-sm font-bold text-amber-700">
+            <Star size={16} className="fill-amber-400 text-amber-400" />
+            {Number(event.averageRating || 0).toFixed(1)}
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-4">
+          {reviews.length ? (
+            reviews.slice(0, 5).map((review) => (
+              <article key={review.id} className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <MessageSquare size={16} className="text-violet-500" />
+                    {review.userName || 'TicketRush customer'}
+                  </div>
+                  <div className="inline-flex items-center gap-1 text-sm font-bold text-amber-700">
+                    <Star size={15} className="fill-amber-400 text-amber-400" />
+                    {review.rating}/5
+                  </div>
+                </div>
+                {review.comment ? <p className="mt-3 text-sm leading-6 text-slate-600">{review.comment}</p> : null}
+              </article>
+            ))
+          ) : (
+            <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/80 p-6 text-sm text-slate-500">
+              No reviews have been submitted yet.
+            </div>
+          )}
         </div>
       </section>
 

@@ -41,3 +41,18 @@ export async function searchEvents({ q, category, from, to, sort } = {}) {
   const response = await api.get(`/events/search?${params.toString()}`);
   return response.data?.data || response.data || [];
 }
+
+export async function getEventReviews(eventId) {
+  const response = await api.get(`/events/${eventId}/reviews`);
+  return response.data?.data || response.data || [];
+}
+
+export async function getEventReviewSummary(eventId) {
+  const response = await api.get(`/events/${eventId}/reviews/summary`);
+  return response.data?.data || response.data;
+}
+
+export async function submitEventReview(eventId, payload) {
+  const response = await api.post(`/events/${eventId}/reviews`, payload);
+  return response.data?.data || response.data;
+}

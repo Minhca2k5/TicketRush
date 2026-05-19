@@ -29,6 +29,7 @@ public class BookingService {
     private final OrderRepository orderRepository;
     private final TicketRepository ticketRepository;
     private final RestTemplate restTemplate;
+    private final BookingEmailService bookingEmailService;
 
     @Value("${app.event-service-url}")
     private String eventServiceUrl;
@@ -144,6 +145,14 @@ public class BookingService {
         orderDTO.setStatus(order.getStatus());
         orderDTO.setCreatedAt(order.getCreatedAt());
         orderDTO.setTickets(ticketDTOs);
+
+        EventDTO event = fetchEventDetails(request.getEventId());
+        bookingEmailService.sendBookingConfirmation(
+                request.getCustomerEmail(),
+                request.getCustomerName(),
+                orderDTO,
+                event
+        );
         
         return orderDTO;
     }
@@ -180,5 +189,24 @@ public class BookingService {
 
         dto.setTickets(ticketDTOs);
         return dto;
+    }
+
+    private EventDTO fetchEventDetails(Long eventId) {
+        try {
+            String url = eventServiceUrl + "/api/events/" + eventId;
+            ResponseEntity<ApiResponse<EventDTO>> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    HttpEntity.EMPTY,
+                    new ParameterizedTypeReference<ApiResponse<EventDTO>>() {}
+            );
+
+            if (response.getBody() == null || !"SUCCESS".equalsIgnoreCase(response.getBody().getStatus())) {
+                return null;
+            }
+            return response.getBody().getData();
+        } catch (RuntimeException exception) {
+            return null;
+        }
     }
 }

@@ -8,4 +8,6 @@ public class CheckoutRequestDTO {
     private Long eventId;
     private List<Long> seatIds;
     private String holderId;
+    private String customerEmail;
+    private String customerName;
 }
