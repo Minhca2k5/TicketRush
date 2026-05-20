@@ -9,6 +9,7 @@ import {
   Save,
   Settings,
   ShieldCheck,
+  Tag,
   Ticket,
   Users,
   WalletCards,
@@ -21,8 +22,9 @@ const sidebarMain = [
   { label: 'Dashboard', icon: BarChart3, to: '/admin/dashboard' },
   { label: 'Events Management', icon: CalendarDays, to: '/admin/events' },
   { label: 'Ticket Sales', icon: Ticket, to: '/admin/sales' },
-  { label: 'Customer Database', icon: Users },
+  { label: 'Customer Database', icon: Users, to: '/admin/customers' },
   { label: 'System Reports', icon: FileBarChart2, to: '/admin/reports' },
+  { label: 'Coupon Codes', icon: Tag, to: '/admin/coupons' },
   { label: 'Admin Settings', icon: Settings, to: '/admin/settings' },
 ];
 

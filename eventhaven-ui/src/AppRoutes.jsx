@@ -17,6 +17,8 @@ import AdminUtilityPage from './pages/admin/AdminUtilityPage';
 import AllEventsPage from './pages/AllEventsPage';
 import UserSettingsPage from './pages/UserSettingsPage';
 
+import AdminCouponsPage from './pages/admin/AdminCouponsPage';
+
 export function AppRoutes() {
   return (
     <Routes>
@@ -132,6 +134,14 @@ export function AppRoutes() {
         element={
           <ProtectedRoute requiredRole="ADMIN">
             <AdminSettingsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/coupons"
+        element={
+          <ProtectedRoute requiredRole="ADMIN">
+            <AdminCouponsPage />
           </ProtectedRoute>
         }
       />

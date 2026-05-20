@@ -6,6 +6,7 @@ import {
   LifeBuoy,
   Settings,
   ShieldCheck,
+  Tag,
   Ticket,
   Users,
 } from 'lucide-react';
@@ -19,6 +20,7 @@ const sidebarMain = [
   { label: 'Ticket Sales', icon: Ticket, to: '/admin/sales' },
   { label: 'Customer Database', icon: Users, to: '/admin/customers' },
   { label: 'System Reports', icon: FileBarChart2, to: '/admin/reports' },
+  { label: 'Coupon Codes', icon: Tag, to: '/admin/coupons' },
   { label: 'Admin Settings', icon: Settings, to: '/admin/settings' },
 ];
 

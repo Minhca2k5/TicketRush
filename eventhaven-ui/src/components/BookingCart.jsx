@@ -15,7 +15,22 @@ function getZoneLabel(seat) {
   return seat.zoneName || seat.zoneTitle || seat.zone || seat.venueZone?.name || 'General';
 }
 
-export function BookingCart({ selectedSeats, onRemoveSeat, onBookNow, onTimerExpired, timerStart, expiresAt, total }) {
+export function BookingCart({
+  selectedSeats,
+  onRemoveSeat,
+  onBookNow,
+  onTimerExpired,
+  timerStart,
+  expiresAt,
+  total,
+  couponCode,
+  setCouponCode,
+  appliedCoupon,
+  onApplyCoupon,
+  onRemoveCoupon,
+  couponError,
+  isApplyingCoupon
+}) {
   const [remaining, setRemaining] = useState(600);
 
   useEffect(() => {
@@ -122,15 +137,77 @@ export function BookingCart({ selectedSeats, onRemoveSeat, onBookNow, onTimerExp
         )}
       </div>
 
+      {selectedSeats.length > 0 && (
+        <div className="mt-4 border-t border-slate-200/80 pt-4">
+          <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Mã giảm giá</label>
+          {appliedCoupon ? (
+            <div className="mt-1.5 flex items-center justify-between rounded-2xl bg-green-50 border border-green-200 px-4 py-2 text-sm text-green-700">
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold uppercase tracking-wider bg-green-200 text-green-800 px-2 py-0.5 rounded text-xs animate-pulse">
+                  {couponCode.toUpperCase()}
+                </span>
+                <span className="text-xs font-bold">Áp dụng thành công</span>
+              </div>
+              <button
+                type="button"
+                onClick={onRemoveCoupon}
+                className="text-xs font-bold text-red-500 hover:text-red-700 hover:underline"
+              >
+                Gỡ bỏ
+              </button>
+            </div>
+          ) : (
+            <div className="mt-1.5 flex gap-2">
+              <input
+                type="text"
+                placeholder="Nhập mã (ví dụ: SUMMER20)"
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value)}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 outline-none transition focus:border-violet-300 focus:ring-4 focus:ring-violet-100"
+              />
+              <button
+                type="button"
+                disabled={isApplyingCoupon || !couponCode.trim()}
+                onClick={() => onApplyCoupon(couponCode)}
+                className="shrink-0 rounded-2xl bg-slate-900 px-4 py-2 text-xs font-bold text-white transition hover:bg-slate-800 disabled:opacity-50"
+              >
+                {isApplyingCoupon ? "Đang áp dụng..." : "Áp dụng"}
+              </button>
+            </div>
+          )}
+          {couponError && (
+            <p className="mt-1.5 text-xs font-semibold text-red-500">{couponError}</p>
+          )}
+        </div>
+      )}
+
       <div className="mt-5 rounded-[24px] bg-slate-950 px-5 py-4 text-white">
         <div className="flex items-center justify-between text-sm text-slate-300">
           <span className="inline-flex items-center gap-2"><Ticket size={16} />Selected Seats</span>
           <span>{selectedSeats.length}</span>
         </div>
-        <div className="mt-3 flex items-end justify-between">
-          <span className="text-sm text-slate-400">Subtotal</span>
-          <span className="text-3xl font-black">{subtotalLabel}</span>
-        </div>
+        
+        {appliedCoupon ? (
+          <div className="mt-3 space-y-2 border-t border-slate-800 pt-3">
+            <div className="flex items-center justify-between text-xs text-slate-400">
+              <span>Subtotal</span>
+              <span>{currencyFormatter.format(total || 0)}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-green-400 font-semibold">
+              <span>Giảm giá ({couponCode.toUpperCase()})</span>
+              <span>-{currencyFormatter.format(appliedCoupon.discountAmount || 0)}</span>
+            </div>
+            <div className="flex items-end justify-between border-t border-slate-800 pt-2">
+              <span className="text-sm text-slate-300">Total Price</span>
+              <span className="text-3xl font-black text-green-400">{currencyFormatter.format(appliedCoupon.finalPrice || 0)}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-3 flex items-end justify-between border-t border-slate-800 pt-3">
+            <span className="text-sm text-slate-400">Subtotal</span>
+            <span className="text-3xl font-black">{subtotalLabel}</span>
+          </div>
+        )}
       </div>
 
       <button

@@ -9,7 +9,7 @@ import { SeatMap } from "./SeatMap";
 import { Legend } from "./Legend";
 import { BookingCart } from "./BookingCart";
 import { getSeatLayout, getSeatMap } from "../services/eventService";
-import { lockSeat, releaseSeat, checkout } from "../services/bookingService";
+import { lockSeat, releaseSeat, checkout, validateCoupon } from "../services/bookingService";
 import { getProfile } from "../services/authService";
 import { readUserSettings } from "../lib/userSettings";
 import SeatMapRenderer from "./seat-map/SeatMapRenderer";
@@ -142,6 +142,41 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
   const [reminderShownFor, setReminderShownFor] = useState(null);
   const [orderId, setOrderId] = useState(null);
   const [changedSeatIds, setChangedSeatIds] = useState([]);
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponError, setCouponError] = useState("");
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+
+  const handleApplyCoupon = async (code) => {
+    if (!code || !code.trim()) {
+      setCouponError("Vui lòng nhập mã giảm giá");
+      return;
+    }
+    setIsApplyingCoupon(true);
+    setCouponError("");
+    try {
+      const response = await validateCoupon(code, total);
+      if (response.success && response.data?.valid) {
+        setAppliedCoupon(response.data);
+        setToast({ type: "info", message: "Áp dụng mã giảm giá thành công!" });
+      } else {
+        setCouponError(response.message || response.data?.message || "Mã giảm giá không hợp lệ");
+        setAppliedCoupon(null);
+      }
+    } catch (err) {
+      setCouponError("Lỗi kiểm tra mã giảm giá");
+      setAppliedCoupon(null);
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponCode("");
+    setCouponError("");
+  };
+
   const holderIdRef = useRef(null);
   const selectedSeatsRef = useRef([]);
   const releaseExpiredInFlightRef = useRef(false);
@@ -409,6 +444,27 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
   }, [liveSeats]);
 
   useEffect(() => {
+    if (appliedCoupon && selectedSeats.length > 0) {
+      validateCoupon(couponCode, total)
+        .then((response) => {
+          if (response.success && response.data?.valid) {
+            setAppliedCoupon(response.data);
+          } else {
+            setAppliedCoupon(null);
+            setCouponError(response.message || "Mã giảm giá không còn hiệu lực cho đơn hàng này");
+          }
+        })
+        .catch(() => {
+          setAppliedCoupon(null);
+        });
+    } else if (selectedSeats.length === 0) {
+      setAppliedCoupon(null);
+      setCouponCode("");
+      setCouponError("");
+    }
+  }, [total, selectedSeats.length]);
+
+  useEffect(() => {
     const holderId = holderIdRef.current;
     if (!eventId || !holderId || hasHydratedSelectionRef.current || !liveSeats.length) {
       return;
@@ -603,23 +659,27 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
     setIsCheckoutLoading(true);
     try {
       const seatIds = selectedSeats.map(s => s.id);
+      const codeToApply = appliedCoupon ? couponCode : '';
       const order = await checkout(eventId, seatIds, holderIdRef.current, {
         email: customerProfile?.email,
         name: customerProfile?.username,
-      });
+      }, codeToApply);
       setOrderId(order.id);
       setCheckoutSuccess(true);
       setSelectedSeats([]);
       setTimerStart(null);
+      setAppliedCoupon(null);
+      setCouponCode("");
       // Trigger a sync so the map turns the seats to SOLD
       await syncSeatStatus({ silentError: true });
     } catch (err) {
-      setSyncMessage("Checkout failed. Your session may have expired.");
-      setToast({ type: "warning", message: "Checkout failed. Your session may have expired." });
+      const errMsg = err.response?.data?.message || err.message || "Checkout failed. Your session may have expired.";
+      setSyncMessage(errMsg);
+      setToast({ type: "warning", message: errMsg });
     } finally {
       setIsCheckoutLoading(false);
     }
-  }, [customerProfile, eventId, selectedSeats, syncSeatStatus]);
+  }, [customerProfile, eventId, selectedSeats, syncSeatStatus, appliedCoupon, couponCode]);
 
   const total = useMemo(
     () => selectedSeats.reduce((sum, seat) => sum + Number(seat.price || 0), 0),
@@ -722,6 +782,13 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
                 timerStart={timerStart}
                 expiresAt={selectionExpiresAt}
                 total={total}
+                couponCode={couponCode}
+                setCouponCode={setCouponCode}
+                appliedCoupon={appliedCoupon}
+                onApplyCoupon={handleApplyCoupon}
+                onRemoveCoupon={handleRemoveCoupon}
+                couponError={couponError}
+                isApplyingCoupon={isApplyingCoupon}
               />
             </div>
           </aside>
@@ -764,6 +831,13 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
               timerStart={timerStart}
               expiresAt={selectionExpiresAt}
               total={total}
+              couponCode={couponCode}
+              setCouponCode={setCouponCode}
+              appliedCoupon={appliedCoupon}
+              onApplyCoupon={handleApplyCoupon}
+              onRemoveCoupon={handleRemoveCoupon}
+              couponError={couponError}
+              isApplyingCoupon={isApplyingCoupon}
             />
           </div>
         </div>
@@ -799,9 +873,27 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
                   <ShoppingBag size={30} />
                 </div>
                 <h3 className="mt-5 text-2xl font-black text-slate-950">Confirm Purchase</h3>
-                <p className="mt-3 text-sm leading-7 text-slate-500">
-                  You are about to purchase {selectedSeats.length} ticket(s) for a total of ${total.toLocaleString()}.
-                </p>
+                {appliedCoupon ? (
+                  <div className="mt-3 text-sm text-slate-500 space-y-1.5 border border-slate-100 bg-slate-50 p-4 rounded-2xl">
+                    <p>You are about to purchase {selectedSeats.length} ticket(s).</p>
+                    <div className="flex justify-between items-center text-xs">
+                      <span>Subtotal:</span>
+                      <span className="line-through">${total.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-green-600 font-semibold">
+                      <span>Discount ({couponCode.toUpperCase()}):</span>
+                      <span>-${appliedCoupon.discountAmount.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-base font-black text-slate-950 border-t border-slate-200 pt-1.5">
+                      <span>Total:</span>
+                      <span>${appliedCoupon.finalPrice.toLocaleString()}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm leading-7 text-slate-500">
+                    You are about to purchase {selectedSeats.length} ticket(s) for a total of ${total.toLocaleString()}.
+                  </p>
+                )}
                 <button
                   type="button"
                   disabled={isCheckoutLoading}
