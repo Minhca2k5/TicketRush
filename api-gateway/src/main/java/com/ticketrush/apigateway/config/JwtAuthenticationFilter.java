@@ -89,6 +89,7 @@ public class JwtAuthenticationFilter implements GlobalFilter {
     private boolean isAdminEndpoint(String path) {
         return path.startsWith("/auth/dashboard")
                 || path.startsWith("/auth/users")
-                || path.startsWith("/auth/settings");
+                || path.startsWith("/auth/settings")
+                || path.contains("/admin/");
     }
 }
