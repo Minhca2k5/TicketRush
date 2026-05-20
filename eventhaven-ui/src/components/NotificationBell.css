@@ -39,12 +39,6 @@
   justify-content: center;
 }
 
-.notification-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 98;
-}
-
 .notification-dropdown {
   position: absolute;
   top: calc(100% + 8px);
@@ -170,6 +164,21 @@
 .notification-icon.event {
   background: #ede9fe;
   color: #7c3aed;
+}
+
+.notification-icon.purchase {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.notification-icon.release {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.notification-icon.ended {
+  background: #fffbeb;
+  color: #f59e0b;
 }
 
 .notification-content {

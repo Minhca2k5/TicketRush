@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
   CalendarDays,
@@ -7,10 +7,10 @@ import {
   FileBarChart2,
   LifeBuoy,
   Receipt,
-  RefreshCcw,
   Search,
   Settings,
   ShieldCheck,
+  Tag,
   Ticket,
   TrendingUp,
   Users,
@@ -20,19 +20,22 @@ import { UserMenu } from '../../components/UserMenu';
 import RevenueTrendChart from '../../components/admin/RevenueTrendChart';
 import SalesStatCard from '../../components/admin/SalesStatCard';
 import SalesTable from '../../components/admin/SalesTable';
+import api from '../../services/api';
+import { getAuthUsers } from '../../services/authService';
 
 const sidebarMain = [
   { label: 'Dashboard', icon: BarChart3, to: '/admin/dashboard' },
   { label: 'Events Management', icon: CalendarDays, to: '/admin/events' },
   { label: 'Ticket Sales', icon: Ticket, to: '/admin/sales' },
-  { label: 'Customer Database', icon: Users },
-  { label: 'System Reports', icon: FileBarChart2 },
-  { label: 'Admin Settings', icon: Settings },
+  { label: 'Customer Database', icon: Users, to: '/admin/customers' },
+  { label: 'System Reports', icon: FileBarChart2, to: '/admin/reports' },
+  { label: 'Coupon Codes', icon: Tag, to: '/admin/coupons' },
+  { label: 'Admin Settings', icon: Settings, to: '/admin/settings' },
 ];
 
 const sidebarSupport = [
-  { label: 'Help & Support', icon: LifeBuoy },
-  { label: 'System Status', icon: ShieldCheck },
+  { label: 'Help & Support', icon: LifeBuoy, to: '/admin/help' },
+  { label: 'System Status', icon: ShieldCheck, to: '/admin/status' },
 ];
 
 const timeFilters = [
@@ -41,27 +44,7 @@ const timeFilters = [
   { key: 'month', label: 'Tháng này' },
 ];
 
-function createRelativeDate(daysAgo, hours, minutes = 15) {
-  const date = new Date();
-  date.setHours(hours, minutes, 0, 0);
-  date.setDate(date.getDate() - daysAgo);
-  return date.toISOString();
-}
-
-const mockOrders = [
-  { id: 1, orderId: '#ORD-9921', eventName: 'Summer Music Festival 2026', customer: 'Emma Carter', createdAt: createRelativeDate(0, 9), amount: 1280, status: 'Completed', ticketCount: 4, refundedTickets: 0 },
-  { id: 2, orderId: '#ORD-9917', eventName: 'Neon Skyline Festival', customer: 'Noah Bennett', createdAt: createRelativeDate(0, 14), amount: 540, status: 'Pending', ticketCount: 2, refundedTickets: 0 },
-  { id: 3, orderId: '#ORD-9898', eventName: 'Championship Night Finals', customer: 'Sophia Nguyen', createdAt: createRelativeDate(1, 18), amount: 960, status: 'Completed', ticketCount: 3, refundedTickets: 0 },
-  { id: 4, orderId: '#ORD-9885', eventName: 'Future Summit 2026', customer: 'Lucas Tran', createdAt: createRelativeDate(1, 11), amount: 420, status: 'Completed', ticketCount: 2, refundedTickets: 0 },
-  { id: 5, orderId: '#ORD-9874', eventName: 'Midnight Orchestra', customer: 'Olivia Pham', createdAt: createRelativeDate(2, 16), amount: 310, status: 'Refunded', ticketCount: 2, refundedTickets: 2 },
-  { id: 6, orderId: '#ORD-9850', eventName: 'Summer Music Festival 2026', customer: 'Mia Roberts', createdAt: createRelativeDate(3, 10), amount: 840, status: 'Completed', ticketCount: 3, refundedTickets: 0 },
-  { id: 7, orderId: '#ORD-9838', eventName: 'Concert: Rock Universe 2026', customer: 'Ethan Hoang', createdAt: createRelativeDate(4, 13), amount: 460, status: 'Completed', ticketCount: 2, refundedTickets: 0 },
-  { id: 8, orderId: '#ORD-9822', eventName: 'Championship Night Finals', customer: 'Ava Le', createdAt: createRelativeDate(5, 15), amount: 1180, status: 'Completed', ticketCount: 4, refundedTickets: 0 },
-  { id: 9, orderId: '#ORD-9806', eventName: 'Future Summit 2026', customer: 'William Scott', createdAt: createRelativeDate(7, 9), amount: 390, status: 'Pending', ticketCount: 2, refundedTickets: 0 },
-  { id: 10, orderId: '#ORD-9781', eventName: 'Neon Skyline Festival', customer: 'Charlotte Vu', createdAt: createRelativeDate(10, 19), amount: 720, status: 'Completed', ticketCount: 3, refundedTickets: 0 },
-  { id: 11, orderId: '#ORD-9756', eventName: 'Midnight Orchestra', customer: 'James Kim', createdAt: createRelativeDate(14, 20), amount: 270, status: 'Refunded', ticketCount: 1, refundedTickets: 1 },
-  { id: 12, orderId: '#ORD-9734', eventName: 'Summer Music Festival 2026', customer: 'Harper Dao', createdAt: createRelativeDate(18, 12), amount: 1540, status: 'Completed', ticketCount: 5, refundedTickets: 0 },
-];
+const SALES_REFRESH_INTERVAL_MS = 10000;
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -73,9 +56,24 @@ function formatCurrency(value) {
   return currencyFormatter.format(value || 0);
 }
 
+function parseBackendDateTime(value) {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  const hasTimeZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
+  const date = new Date(hasTimeZone ? normalized : `${normalized}Z`);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function formatDateTime(value) {
-  if (!value) return 'TBD';
-  return new Date(value).toLocaleString('en-US', {
+  const date = parseBackendDateTime(value);
+  if (!date) return 'TBD';
+  return date.toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -97,16 +95,165 @@ function startOfMonth() {
   return date;
 }
 
+function getDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getDateLabel(date) {
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function eachDayBetween(startDate, endDate) {
+  const days = [];
+  const cursor = new Date(startDate);
+  cursor.setHours(0, 0, 0, 0);
+
+  const end = new Date(endDate);
+  end.setHours(0, 0, 0, 0);
+
+  while (cursor <= end) {
+    days.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return days;
+}
+
+function getTrendDays(selectedFilter) {
+  const today = startOfToday();
+
+  if (selectedFilter === 'today') {
+    return [today];
+  }
+
+  if (selectedFilter === 'month') {
+    return eachDayBetween(startOfMonth(), today);
+  }
+
+  const sevenDaysAgo = new Date(today);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+  return eachDayBetween(sevenDaysAgo, today);
+}
+
+function normalizeOrderStatus(status) {
+  const normalized = String(status || '').trim().toUpperCase();
+
+  if (['PAID', 'COMPLETED', 'SUCCESS', 'CONFIRMED'].includes(normalized)) return 'Completed';
+  if (['PENDING', 'HELD', 'PROCESSING'].includes(normalized)) return 'Pending';
+  if (['CANCELLED', 'CANCELED'].includes(normalized)) return 'Cancelled';
+
+  return normalized ? normalized.charAt(0) + normalized.slice(1).toLowerCase() : 'Pending';
+}
+
+function getEventList(eventsResponse) {
+  const payload = eventsResponse?.data?.data || eventsResponse?.data || [];
+  if (Array.isArray(payload?.content)) return payload.content;
+  return Array.isArray(payload) ? payload : [];
+}
+
+function getUserList(usersResponse) {
+  const payload = usersResponse?.data?.data || usersResponse?.data || usersResponse || [];
+  if (Array.isArray(payload?.content)) return payload.content;
+  return Array.isArray(payload) ? payload : [];
+}
+
+function getCustomerName(userId, usersByHolderId) {
+  const rawUserId = String(userId || '').trim();
+  if (!rawUserId) return 'Unknown customer';
+  return usersByHolderId.get(rawUserId) || rawUserId;
+}
+
+function transformOrder(order, eventsById, usersByHolderId) {
+  const ticketCount = Array.isArray(order.tickets) ? order.tickets.length : Number(order.ticketCount || 0);
+  const status = normalizeOrderStatus(order.status);
+  const event = eventsById.get(Number(order.eventId));
+
+  return {
+    id: order.id,
+    orderId: `#ORD-${String(order.id || 0).padStart(4, '0')}`,
+    eventName: event?.name || event?.title || (order.eventId ? `Event #${order.eventId}` : 'Ticket order'),
+    customer: getCustomerName(order.userId, usersByHolderId),
+    createdAt: order.createdAt,
+    amount: Number(order.totalPrice ?? order.amount ?? 0),
+    status,
+    ticketCount,
+  };
+}
+
 export default function TicketSalesPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [selectedFilter, setSelectedFilter] = useState('7d');
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadSalesData({ showLoading = false } = {}) {
+      if (showLoading) {
+        setLoading(true);
+      }
+      setLoadError('');
+
+      try {
+        const [ordersResponse, eventsResponse, usersResponse] = await Promise.all([
+          api.get('/booking/admin/orders'),
+          api.get('/events').catch(() => null),
+          getAuthUsers().catch(() => []),
+        ]);
+
+        const rawOrders = ordersResponse.data?.data || ordersResponse.data || [];
+        const eventsById = new Map(
+          getEventList(eventsResponse).map((event) => [Number(event.id), event])
+        );
+        const usersByHolderId = new Map(
+          getUserList(usersResponse).map((user) => [`user-${user.id}`, user.username || user.email || `User ${user.id}`])
+        );
+        const mappedOrders = (Array.isArray(rawOrders) ? rawOrders : []).map((order) => transformOrder(order, eventsById, usersByHolderId));
+
+        if (!ignore) setOrders(mappedOrders);
+      } catch (error) {
+        if (!ignore) {
+          setOrders([]);
+          setLoadError(error.response?.data?.message || 'Unable to load ticket sales data.');
+        }
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    }
+
+    loadSalesData({ showLoading: true });
+
+    const refreshInterval = window.setInterval(() => {
+      loadSalesData();
+    }, SALES_REFRESH_INTERVAL_MS);
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadSalesData();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      ignore = true;
+      window.clearInterval(refreshInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   const filteredOrders = useMemo(() => {
     const today = startOfToday();
 
-    return mockOrders.filter((order) => {
-      const createdAt = new Date(order.createdAt);
+    return orders.filter((order) => {
+      const createdAt = parseBackendDateTime(order.createdAt);
+      if (!createdAt) return selectedFilter !== 'today';
 
       if (selectedFilter === 'today') {
         return createdAt >= today;
@@ -120,13 +267,13 @@ export default function TicketSalesPage() {
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
       return createdAt >= sevenDaysAgo;
     });
-  }, [selectedFilter]);
+  }, [orders, selectedFilter]);
 
   const stats = useMemo(() => {
     const completedOrders = filteredOrders.filter((order) => order.status === 'Completed');
+    const pendingOrders = filteredOrders.filter((order) => order.status === 'Pending');
     const completedRevenue = completedOrders.reduce((sum, order) => sum + order.amount, 0);
     const soldTickets = completedOrders.reduce((sum, order) => sum + order.ticketCount, 0);
-    const refundedTickets = filteredOrders.reduce((sum, order) => sum + order.refundedTickets, 0);
     const averageOrderValue = completedOrders.length ? Math.round(completedRevenue / completedOrders.length) : 0;
 
     return [
@@ -155,45 +302,61 @@ export default function TicketSalesPage() {
         iconBg: 'bg-emerald-100 text-emerald-600',
       },
       {
-        label: 'Refunded Tickets',
-        value: refundedTickets.toLocaleString(),
-        hint: 'Marked for customer refund',
-        icon: RefreshCcw,
-        surface: 'from-rose-50 to-red-50',
-        iconBg: 'bg-rose-100 text-rose-600',
+        label: 'Pending Orders',
+        value: pendingOrders.length.toLocaleString(),
+        hint: 'Awaiting payment or confirmation',
+        icon: Receipt,
+        surface: 'from-amber-50 to-yellow-50',
+        iconBg: 'bg-amber-100 text-amber-600',
       },
     ];
   }, [filteredOrders]);
 
   const trendData = useMemo(() => {
     const grouped = filteredOrders.reduce((accumulator, order) => {
-      const label = new Date(order.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      accumulator[label] = (accumulator[label] || 0) + (order.status === 'Completed' ? order.amount : 0);
+      const createdAt = parseBackendDateTime(order.createdAt);
+      if (!createdAt) return accumulator;
+
+      const key = getDateKey(createdAt);
+      accumulator[key] = (accumulator[key] || 0) + (order.status === 'Completed' ? order.amount : 0);
       return accumulator;
     }, {});
 
-    const points = Object.entries(grouped).map(([label, value]) => ({ label, value }));
+    const points = getTrendDays(selectedFilter).map((date) => {
+      const key = getDateKey(date);
+      return {
+        label: getDateLabel(date),
+        value: grouped[key] || 0,
+      };
+    });
+
     return points.length ? points : [{ label: 'No data', value: 0 }];
-  }, [filteredOrders]);
+  }, [filteredOrders, selectedFilter]);
 
   const recentOrders = useMemo(() => (
-    [...filteredOrders].sort((first, second) => new Date(second.createdAt) - new Date(first.createdAt))
+    [...filteredOrders].sort((first, second) => (
+      (parseBackendDateTime(second.createdAt)?.getTime() || 0)
+      - (parseBackendDateTime(first.createdAt)?.getTime() || 0)
+    ))
   ), [filteredOrders]);
+
+  const topEventName = useMemo(() => {
+    const revenueByEvent = new Map();
+
+    filteredOrders
+      .filter((order) => order.status === 'Completed')
+      .forEach((order) => {
+        revenueByEvent.set(order.eventName, (revenueByEvent.get(order.eventName) || 0) + order.amount);
+      });
+
+    return Array.from(revenueByEvent.entries())
+      .sort((first, second) => second[1] - first[1])[0]?.[0] || 'No transactions yet';
+  }, [filteredOrders]);
 
   return (
     <div className="min-h-screen bg-[#f4f7fb] font-sans text-slate-900">
       <div className="grid min-h-screen lg:grid-cols-[300px_minmax(0,1fr)]">
-        <aside className="border-r border-[#dde6f0] bg-white">
-          <div className="flex items-center gap-4 border-b border-[#e8edf4] px-8 py-7">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-b from-violet-500 to-indigo-600 text-white shadow-lg shadow-violet-500/25">
-              <Ticket size={18} />
-            </div>
-            <div>
-              <p className="text-lg font-black text-slate-950">TicketRush</p>
-              <p className="text-sm text-slate-500">Admin Portal</p>
-            </div>
-          </div>
-
+        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] self-start flex-col overflow-y-auto border-r border-[#dde6f0] bg-white lg:flex">
           <div className="px-5 py-7">
             <p className="px-4 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Main</p>
             <div className="mt-4 space-y-2">
@@ -219,12 +382,22 @@ export default function TicketSalesPage() {
           <div className="mt-auto border-t border-[#e8edf4] px-5 py-7">
             <p className="px-4 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Support</p>
             <div className="mt-4 space-y-2">
-              {sidebarSupport.map(({ label, icon: Icon }) => (
-                <button key={label} type="button" className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900">
-                  <Icon size={17} />
-                  <span>{label}</span>
-                </button>
-              ))}
+              {sidebarSupport.map(({ label, icon: Icon, to }) => {
+                const isActive = location.pathname.startsWith(to);
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => navigate(to)}
+                    className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
+                      isActive ? 'bg-violet-50 text-violet-700 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.35)]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    }`}
+                  >
+                    <Icon size={17} />
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </aside>
@@ -234,7 +407,7 @@ export default function TicketSalesPage() {
             <div className="hidden">
               <Search size={18} />
               <span className="text-sm">Search ticket orders...</span>
-              <span className="ml-auto text-xs font-semibold">⌘K</span>
+              <span className="ml-auto text-xs font-semibold">Ctrl K</span>
             </div>
 
             <div className="flex items-center gap-4">
@@ -253,7 +426,7 @@ export default function TicketSalesPage() {
             <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
               <div>
                 <h1 className="text-3xl font-black tracking-tight text-slate-950">Ticket Sales Analysis</h1>
-                <p className="mt-2 text-sm text-slate-500">Monitor revenue, orders, and refund activity across the latest ticket transactions.</p>
+                <p className="mt-2 text-sm text-slate-500">Monitor revenue, completed orders, and pending activity across the latest ticket transactions.</p>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -271,6 +444,12 @@ export default function TicketSalesPage() {
                 ))}
               </div>
             </div>
+
+            {loadError && (
+              <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                {loadError}
+              </div>
+            )}
 
             <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {stats.map((card) => (
@@ -325,9 +504,7 @@ export default function TicketSalesPage() {
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="text-sm font-semibold text-slate-500">Top Event</p>
-                        <p className="mt-2 text-lg font-black text-slate-950">
-                          {recentOrders[0]?.eventName || 'No transactions yet'}
-                        </p>
+                        <p className="mt-2 text-lg font-black text-slate-950">{topEventName}</p>
                       </div>
                       <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-100 text-sky-600">
                         <BarChart3 size={18} />
@@ -342,15 +519,21 @@ export default function TicketSalesPage() {
               <div className="flex flex-col gap-4 border-b border-slate-100 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <h2 className="text-2xl font-black text-slate-950">Recent Ticket Transactions</h2>
-                  <p className="mt-2 text-sm text-slate-500">Latest completed, pending, and refunded orders from the admin sales feed.</p>
+                  <p className="mt-2 text-sm text-slate-500">Latest completed, pending, and cancelled orders from the admin sales feed.</p>
                 </div>
               </div>
 
-              <SalesTable
-                orders={recentOrders}
-                formatDateTime={formatDateTime}
-                formatCurrency={formatCurrency}
-              />
+              {loading ? (
+                <div className="px-6 py-16 text-center text-sm text-slate-500">
+                  Loading ticket sales data...
+                </div>
+              ) : (
+                <SalesTable
+                  orders={recentOrders}
+                  formatDateTime={formatDateTime}
+                  formatCurrency={formatCurrency}
+                />
+              )}
             </section>
           </main>
         </div>

@@ -51,4 +51,10 @@ public class BookingController {
         java.util.List<OrderDTO> orders = bookingService.getUserOrders(userId);
         return ResponseEntity.ok(ApiResponse.success("Orders fetched successfully", orders));
     }
+
+    @GetMapping("/admin/orders")
+    public ResponseEntity<ApiResponse<java.util.List<OrderDTO>>> getAllOrders() {
+        java.util.List<OrderDTO> orders = bookingService.getAllOrders();
+        return ResponseEntity.ok(ApiResponse.success("All orders fetched successfully", orders));
+    }
 }

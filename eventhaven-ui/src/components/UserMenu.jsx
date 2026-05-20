@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Settings, LogOut, ChevronDown } from 'lucide-react';
 import { clearAuth, getAuthRole, getAuthToken } from '../lib/auth';
+import { getProfile } from '../services/authService';
 import './UserMenu.css';
 
 const getCurrentUser = () => {
@@ -12,8 +13,8 @@ const getCurrentUser = () => {
 
   const role = getAuthRole() || 'CUSTOMER';
   return {
-    name: role === 'ADMIN' ? 'Admin User' : 'Customer User',
-    email: role === 'ADMIN' ? 'admin@ticketrush.local' : 'customer@ticketrush.local',
+    name: role === 'ADMIN' ? 'Admin' : 'Customer',
+    email: '',
     avatar: null,
     role,
   };
@@ -21,9 +22,47 @@ const getCurrentUser = () => {
 
 export function UserMenu() {
   const [isOpen, setIsOpen] = useState(false);
+  const [profileUser, setProfileUser] = useState(null);
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
-  const user = getCurrentUser();
+  const fallbackUser = getCurrentUser();
+  const user = profileUser || fallbackUser;
+  const profilePath = user?.role === 'ADMIN' ? '/admin/settings' : '/profile';
+  const settingsPath = user?.role === 'ADMIN' ? '/admin/settings' : '/settings';
+
+  useEffect(() => {
+    if (!fallbackUser) {
+      setProfileUser(null);
+      return;
+    }
+
+    let isActive = true;
+
+    getProfile()
+      .then((profile) => {
+        if (!isActive) {
+          return;
+        }
+
+        const role = profile.role || fallbackUser.role;
+        const name = profile.username || fallbackUser.name;
+        setProfileUser({
+          name,
+          email: profile.email || '',
+          avatar: null,
+          role,
+        });
+      })
+      .catch(() => {
+        if (isActive) {
+          setProfileUser(null);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [fallbackUser?.role]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -88,7 +127,7 @@ export function UserMenu() {
               </div>
               <div>
                 <p className="dropdown-user-name">{user.name}</p>
-                <p className="dropdown-user-email">{user.email}</p>
+                {user.email && <p className="dropdown-user-email">{user.email}</p>}
                 <span className="user-role-badge">{user.role}</span>
               </div>
             </div>
@@ -97,11 +136,11 @@ export function UserMenu() {
           <div className="dropdown-divider" />
 
           <div className="dropdown-items">
-            <button className="dropdown-item" onClick={() => { navigate('/profile'); setIsOpen(false); }}>
+            <button className="dropdown-item" onClick={() => { navigate(profilePath); setIsOpen(false); }}>
               <User size={18} />
               <span>Profile</span>
             </button>
-            <button className="dropdown-item" onClick={() => { navigate('/settings'); setIsOpen(false); }}>
+            <button className="dropdown-item" onClick={() => { navigate(settingsPath); setIsOpen(false); }}>
               <Settings size={18} />
               <span>Settings</span>
             </button>

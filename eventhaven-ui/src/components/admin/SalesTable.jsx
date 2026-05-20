@@ -7,8 +7,13 @@ function statusClass(status) {
 export default function SalesTable({ orders, formatDateTime, formatCurrency }) {
   if (!orders.length) {
     return (
-      <div className="px-6 py-16 text-center text-sm text-slate-500">
-        No ticket transactions found for this time range.
+      <div className="px-6 py-16">
+        <div className="mx-auto max-w-md rounded-[24px] border border-dashed border-slate-200 bg-slate-50/80 px-6 py-8 text-center">
+          <p className="text-base font-black text-slate-800">No ticket transactions yet</p>
+          <p className="mt-2 text-sm font-medium text-slate-500">
+            Orders will show up here after customers complete or start a ticket checkout.
+          </p>
+        </div>
       </div>
     );
   }

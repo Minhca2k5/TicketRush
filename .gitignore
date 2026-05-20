@@ -8,4 +8,5 @@
 /booking-service/target
 /queue-service/target
 /api-gateway/target
+.env
 .gitignore

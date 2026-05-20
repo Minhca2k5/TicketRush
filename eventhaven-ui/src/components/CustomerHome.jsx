@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { isEventBookable } from '../lib/event-status';
 import './CustomerHome.css';
 
 /* ── SVG icons ── */

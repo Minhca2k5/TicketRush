@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
+import java.time.Instant;
+
 @Entity
 @Table(name = "users")
 public class User {
@@ -22,6 +24,16 @@ public class User {
     @Email
     @NotBlank
     private String email;
+
+    @Column(nullable = false)
+    private boolean emailVerified;
+
+    private String verificationCode;
+
+    private Instant verificationCodeExpiresAt;
+
+    @Column(nullable = false)
+    private int verificationFailedAttempts;
 
     @Enumerated(EnumType.STRING)
     private Role role;
@@ -43,6 +55,18 @@ public class User {
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
+
+    public boolean isEmailVerified() { return emailVerified; }
+    public void setEmailVerified(boolean emailVerified) { this.emailVerified = emailVerified; }
+
+    public String getVerificationCode() { return verificationCode; }
+    public void setVerificationCode(String verificationCode) { this.verificationCode = verificationCode; }
+
+    public Instant getVerificationCodeExpiresAt() { return verificationCodeExpiresAt; }
+    public void setVerificationCodeExpiresAt(Instant verificationCodeExpiresAt) { this.verificationCodeExpiresAt = verificationCodeExpiresAt; }
+
+    public int getVerificationFailedAttempts() { return verificationFailedAttempts; }
+    public void setVerificationFailedAttempts(int verificationFailedAttempts) { this.verificationFailedAttempts = verificationFailedAttempts; }
 
     public Role getRole() { return role; }
     public void setRole(Role role) { this.role = role; }

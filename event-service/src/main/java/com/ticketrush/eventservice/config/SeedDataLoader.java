@@ -45,7 +45,7 @@ public class SeedDataLoader implements CommandLineRunner {
                 "Aurora Entertainment",
                 "A flagship outdoor music festival with premium seating zones and timed entry.",
                 "LIVE",
-                "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=1400&q=80",
+                "https://res.cloudinary.com/dymfgqw8y/image/upload/v1779251051/ticketrush/event-banners/event-2-banner.jpg",
                 LocalDateTime.now().plusDays(10).withHour(18).withMinute(30),
                 LocalDateTime.now().plusDays(10).withHour(23).withMinute(0),
                 List.of(
@@ -61,7 +61,7 @@ public class SeedDataLoader implements CommandLineRunner {
                 "Prime Sports Co",
                 "High-demand arena event with premium courtside seats and general bowl seating.",
                 "PENDING",
-                "https://images.unsplash.com/photo-1547347298-4074fc3086f0?auto=format&fit=crop&w=1400&q=80",
+                "https://res.cloudinary.com/dymfgqw8y/image/upload/v1779251053/ticketrush/event-banners/event-3-banner.jpg",
                 LocalDateTime.now().plusDays(20).withHour(19).withMinute(0),
                 LocalDateTime.now().plusDays(20).withHour(22).withMinute(30),
                 List.of(
@@ -77,7 +77,7 @@ public class SeedDataLoader implements CommandLineRunner {
                 "Silver Note Productions",
                 "A premium indoor performance with intimate seating and balcony access.",
                 "DRAFT",
-                "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1400&q=80",
+                "https://res.cloudinary.com/dymfgqw8y/image/upload/v1779251056/ticketrush/event-banners/event-4-banner.jpg",
                 LocalDateTime.now().plusDays(35).withHour(20).withMinute(0),
                 LocalDateTime.now().plusDays(35).withHour(22).withMinute(0),
                 List.of(
@@ -93,7 +93,7 @@ public class SeedDataLoader implements CommandLineRunner {
                 "Luma Live",
                 "An immersive EDM festival with panoramic visuals, LED wristbands, and late-night aftershow sets.",
                 "LIVE",
-                "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1400&q=80",
+                "https://res.cloudinary.com/dymfgqw8y/image/upload/v1779251058/ticketrush/event-banners/event-5-banner.jpg",
                 LocalDateTime.now().plusDays(18).withHour(19).withMinute(30),
                 LocalDateTime.now().plusDays(19).withHour(0).withMinute(30),
                 List.of(
@@ -109,7 +109,7 @@ public class SeedDataLoader implements CommandLineRunner {
                 "Northstar Labs",
                 "A curated technology summit focused on AI products, startup operators, and modern digital experiences.",
                 "LIVE",
-                "https://images.unsplash.com/photo-1511578314322-379afb476865?auto=format&fit=crop&w=1400&q=80",
+                "https://res.cloudinary.com/dymfgqw8y/image/upload/v1779251060/ticketrush/event-banners/event-6-banner.jpg",
                 LocalDateTime.now().plusDays(28).withHour(9).withMinute(0),
                 LocalDateTime.now().plusDays(28).withHour(17).withMinute(30),
                 List.of(

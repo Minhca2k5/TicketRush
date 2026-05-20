@@ -23,6 +23,14 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ticketrush
       SPRING_DATASOURCE_USERNAME: minh
       SPRING_DATASOURCE_PASSWORD: minh123
+      SMTP_HOST: "${SMTP_HOST:-smtp.gmail.com}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USERNAME: "${SMTP_USERNAME:?Set SMTP_USERNAME in .env}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:?Set SMTP_PASSWORD in .env}"
+      SMTP_AUTH: "${SMTP_AUTH:-true}"
+      SMTP_STARTTLS: "${SMTP_STARTTLS:-true}"
+      SMTP_SSL_ENABLE: "${SMTP_SSL_ENABLE:-false}"
+      MAIL_FROM: "${MAIL_FROM:-${SMTP_USERNAME:?Set SMTP_USERNAME in .env}}"
     ports:
       - "8081:8081"
     depends_on:
@@ -38,8 +46,15 @@ services:
       DB_NAME: ticketrush
       DB_USERNAME: minh
       DB_PASSWORD: minh123
+      BOOKING_SERVICE_URL: http://booking-service:8083
+      CLOUDINARY_CLOUD_NAME: "${CLOUDINARY_CLOUD_NAME:-}"
+      CLOUDINARY_API_KEY: "${CLOUDINARY_API_KEY:-}"
+      CLOUDINARY_API_SECRET: "${CLOUDINARY_API_SECRET:-}"
+      CLOUDINARY_FOLDER: "${CLOUDINARY_FOLDER:-ticketrush/event-banners}"
     ports:
       - "8082:8082"
+    volumes:
+      - event_uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -49,8 +64,15 @@ services:
       context: ./api-gateway
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      GEMINI_MODEL: "${GEMINI_MODEL:-gemini-2.5-flash}"
     ports:
       - "8080:8080"
+    volumes:
+      - ./ARCHITECTURE.md:/app/rag-docs/ARCHITECTURE.md:ro
+      - ./TicketRush-Roadmap.md:/app/rag-docs/TicketRush-Roadmap.md:ro
+      - ./CONVENTIONS.md:/app/rag-docs/CONVENTIONS.md:ro
+      - ./docker-compose.yml:/app/rag-docs/docker-compose.yml:ro
     depends_on:
       auth-service:
         condition: service_started
@@ -67,12 +89,20 @@ services:
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: booking_db
+      DB_NAME: ticketrush
       DB_USERNAME: minh
       DB_PASSWORD: minh123
       EVENT_SERVICE_URL: http://event-service:8082
+      SMTP_HOST: "${SMTP_HOST:-smtp.gmail.com}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USERNAME: "${SMTP_USERNAME:?Set SMTP_USERNAME in .env}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:?Set SMTP_PASSWORD in .env}"
+      SMTP_AUTH: "${SMTP_AUTH:-true}"
+      SMTP_STARTTLS: "${SMTP_STARTTLS:-true}"
+      SMTP_SSL_ENABLE: "${SMTP_SSL_ENABLE:-false}"
+      MAIL_FROM: "${MAIL_FROM:-${SMTP_USERNAME:?Set SMTP_USERNAME in .env}}"
     ports:
-      - "8083:8080"
+      - "8083:8083"
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,11 +113,11 @@ services:
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: queue_db
+      DB_NAME: ticketrush
       DB_USERNAME: minh
       DB_PASSWORD: minh123
     ports:
-      - "8084:8080"
+      - "8084:8084"
     depends_on:
       postgres:
         condition: service_healthy
@@ -103,3 +133,4 @@ services:
 
 volumes:
   postgres_data:
+  event_uploads:

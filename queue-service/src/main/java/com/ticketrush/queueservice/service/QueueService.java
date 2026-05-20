@@ -4,9 +4,11 @@ import com.ticketrush.queueservice.dto.QueueStatusDTO;
 import com.ticketrush.queueservice.entity.QueueEntry;
 import com.ticketrush.queueservice.repository.QueueEntryRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
@@ -19,6 +21,7 @@ public class QueueService {
 
     @Transactional
     public QueueStatusDTO joinQueue(Long eventId, String userId) {
+        validateQueueIdentity(eventId, userId);
         Optional<QueueEntry> existing = queueRepository.findByEventIdAndUserId(eventId, userId);
         QueueEntry entry;
         
@@ -39,8 +42,9 @@ public class QueueService {
     }
 
     public QueueStatusDTO getStatus(Long eventId, String userId) {
+        validateQueueIdentity(eventId, userId);
         QueueEntry entry = queueRepository.findByEventIdAndUserId(eventId, userId)
-                .orElseThrow(() -> new RuntimeException("User is not in the queue"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User is not in the queue"));
 
         QueueStatusDTO status = new QueueStatusDTO();
         status.setStatus(entry.getStatus());
@@ -56,6 +60,15 @@ public class QueueService {
         }
 
         return status;
+    }
+
+    private void validateQueueIdentity(Long eventId, String userId) {
+        if (eventId == null || eventId <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid event id");
+        }
+        if (userId == null || userId.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing queue user identity");
+        }
     }
 
     // Every 15 seconds, allow up to 50 more users into the event

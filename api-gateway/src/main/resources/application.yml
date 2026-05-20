@@ -23,6 +23,10 @@ spring:
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
       routes:
+        - id: event-service-websocket
+          uri: ws://localhost:8082
+          predicates:
+            - Path=/ws/events/**
         - id: auth-service
           uri: http://localhost:8081
           predicates:
@@ -30,17 +34,25 @@ spring:
         - id: event-service
           uri: http://localhost:8082
           predicates:
-            - Path=/api/**
+            - Path=/api/events/**,/api/dashboard/**
         - id: booking-service
           uri: http://localhost:8083
           predicates:
-            - Path=/booking/**
+            - Path=/api/booking/**
         - id: queue-service
           uri: http://localhost:8084
           predicates:
-            - Path=/queue/**
-          filters:
-            - StripPrefix=1
+            - Path=/api/queue/**
 
 jwt:
   secret: ticketrushJwtSecretKeyMustBeAtLeastThirtyTwoBytesLong2026
+
+chatbot:
+  event-service:
+    base-url: http://localhost:8082
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-2.5-flash}
+    base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
+  rag:
+    document-paths: ${CHATBOT_RAG_DOCUMENTS:../ARCHITECTURE.md,../TicketRush-Roadmap.md,../CONVENTIONS.md,../docker-compose.yml}

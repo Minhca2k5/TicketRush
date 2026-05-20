@@ -10,6 +10,7 @@ public class UserResponse {
     private final User.Role role;
     private final Integer age;
     private final User.Gender gender;
+    private final boolean emailVerified;
 
     public UserResponse(User user) {
         this.id = user.getId();
@@ -18,6 +19,7 @@ public class UserResponse {
         this.role = user.getRole();
         this.age = user.getAge();
         this.gender = user.getGender();
+        this.emailVerified = user.isEmailVerified();
     }
 
     public Long getId() {
@@ -42,5 +44,9 @@ public class UserResponse {
 
     public User.Gender getGender() {
         return gender;
+    }
+
+    public boolean isEmailVerified() {
+        return emailVerified;
     }
 }

@@ -25,6 +25,8 @@ public class EventDTO {
     private List<EventPriceTierDTO> priceTiers;
     private List<SeatDTO> seats;
     private JsonNode seatLayout;
+    private double averageRating;
+    private long reviewCount;
 
     public EventDTO(
             Long id,

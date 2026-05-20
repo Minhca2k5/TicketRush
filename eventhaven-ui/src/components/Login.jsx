@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { LogIn, Lock, Mail, Ticket } from 'lucide-react';
 import { getRoleFromToken } from '../lib/auth';
+import { getProfile } from '../services/authService';
+import { getDefaultRoute, readUserSettings } from '../lib/userSettings';
 import './Auth.css';
 
 const API_BASE_URL = import.meta.env.VITE_AUTH_API_BASE_URL || 'http://localhost:8080';
@@ -24,7 +26,8 @@ const Login = () => {
     try {
       response = await axios.post(`${API_BASE_URL}/auth/login`, { username, password });
     } catch (error) {
-      setError(error.response?.data?.error || error.message || 'Login failed');
+      const backendMessage = error.response?.data?.error || error.message || 'Login failed';
+      setError(/email not verified/i.test(backendMessage) ? 'Please verify your email before signing in.' : backendMessage);
       setSubmitting(false);
       return;
     }
@@ -40,8 +43,19 @@ const Login = () => {
     localStorage.setItem('token', token);
     localStorage.setItem('role', role);
 
-    const fallbackPath = role === 'ADMIN' ? '/admin' : '/';
-    navigate(location.state?.from?.pathname || fallbackPath, { replace: true });
+    let fallbackPath = role === 'ADMIN' ? '/admin' : '/';
+    if (role !== 'ADMIN') {
+      try {
+        const profile = await getProfile();
+        fallbackPath = getDefaultRoute(readUserSettings(profile).defaultView);
+      } catch {
+        fallbackPath = '/';
+      }
+    }
+    const redirectTo = location.state?.from
+      ? `${location.state.from.pathname || ''}${location.state.from.search || ''}${location.state.from.hash || ''}`
+      : fallbackPath;
+    navigate(redirectTo || fallbackPath, { replace: true });
   };
 
   return (

@@ -23,11 +23,14 @@ import com.ticketrush.eventservice.entity.Venue;
 import com.ticketrush.eventservice.entity.VenueZone;
 import com.ticketrush.eventservice.repository.EventPriceTierRepository;
 import com.ticketrush.eventservice.repository.EventRepository;
+import com.ticketrush.eventservice.repository.EventReviewRepository;
 import com.ticketrush.eventservice.repository.PriceTierRepository;
 import com.ticketrush.eventservice.repository.SeatRepository;
 import com.ticketrush.eventservice.repository.VenueRepository;
 import com.ticketrush.eventservice.repository.VenueZoneRepository;
+import com.ticketrush.eventservice.realtime.SeatMapRealtimePublisher;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +44,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -56,13 +60,17 @@ public class EventService {
     private final VenueRepository venueRepository;
     private final EventPriceTierRepository eventPriceTierRepository;
     private final PriceTierRepository priceTierRepository;
+    private final EventReviewRepository eventReviewRepository;
     private final SeatService seatService;
     private final ObjectMapper objectMapper;
+    private final SeatMapRealtimePublisher seatMapRealtimePublisher;
+    private final BookingNotificationClient bookingNotificationClient;
 
     @Transactional
     public EventDTO createEvent(EventDTO eventDTO) {
         Event event = new Event();
         Event savedEvent = persistEventGraph(event, eventDTO);
+        seatMapRealtimePublisher.publishSeatMapChanged(savedEvent.getId(), "EVENT_CREATED", List.of());
         return mapToDTO(savedEvent);
     }
 
@@ -76,6 +84,19 @@ public class EventService {
     @Transactional(readOnly = true)
     public List<EventSummaryDTO> getAllEvents() {
         return eventRepository.findAll().stream()
+                .map(this::mapToSummaryDTO)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<EventSummaryDTO> searchEvents(String keyword, String category, LocalDateTime fromDate, LocalDateTime toDate) {
+        String normalizedKeyword = (keyword == null || keyword.trim().isEmpty()) ? null : keyword.trim();
+        String normalizedCategory = normalizeCategoryKey(category);
+
+        return eventRepository.findAll(Sort.by(Sort.Direction.ASC, "startTime")).stream()
+                .filter(event -> matchesKeyword(event, normalizedKeyword))
+                .filter(event -> matchesCategory(event, normalizedCategory))
+                .filter(event -> matchesDateRange(event, fromDate, toDate))
                 .map(this::mapToSummaryDTO)
                 .collect(Collectors.toList());
     }
@@ -115,17 +136,44 @@ public class EventService {
         Venue previousVenue = event.getVenue();
         Event updatedEvent = persistEventGraph(event, eventDTO);
         cleanupOrphanVenue(previousVenue, updatedEvent.getVenue());
+        seatMapRealtimePublisher.publishSeatMapChanged(updatedEvent.getId(), "EVENT_LAYOUT_UPDATED", List.of());
         return mapToDTO(updatedEvent);
+    }
+
+    @Transactional
+    public EventDTO fastForwardEvent(Long id) {
+        Event event = eventRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Event not found"));
+        
+        event.setStartTime(LocalDateTime.now().minusDays(2));
+        event.setEndTime(LocalDateTime.now().minusDays(1));
+        event.setStatus("PAST");
+        
+        Event savedEvent = eventRepository.save(event);
+        
+        bookingNotificationClient.notifyEventEnded(savedEvent.getId(), savedEvent.getName());
+        
+        return mapToDTO(savedEvent);
+    }
+
+    @Transactional
+    public int closeEndedEvents() {
+        List<Event> endedEvents = eventRepository.findEventsReadyToClose(LocalDateTime.now());
+        if (endedEvents.isEmpty()) {
+            return 0;
+        }
+
+        endedEvents.forEach(event -> event.setStatus("PAST"));
+        List<Event> savedEvents = eventRepository.saveAll(endedEvents);
+
+        savedEvents.forEach(event -> bookingNotificationClient.notifyEventEnded(event.getId(), event.getName()));
+        return savedEvents.size();
     }
 
     @Transactional
     public void deleteEvent(Long id) {
         Event event = eventRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Event not found"));
-
-        if (hasSoldSeats(id)) {
-            throw new RuntimeException("Cannot delete an event with sold tickets");
-        }
 
         Venue venue = event.getVenue();
         CleanupSnapshot cleanupSnapshot = clearEventArtifacts(event.getId());
@@ -184,7 +232,12 @@ public class EventService {
         event.setEndTime(dto.getEndTime());
         event.setStatus(resolveStatus(dto));
 
-        String resolvedImageUrl = firstNonBlank(dto.getImageUrl(), dto.getBannerUrl());
+        String resolvedImageUrl = firstNonBlank(
+                dto.getImageUrl(),
+                dto.getBannerUrl(),
+                event.getImageUrl(),
+                event.getBannerUrl()
+        );
         event.setImageUrl(resolvedImageUrl);
         event.setBannerUrl(resolvedImageUrl);
         event.setSeatLayoutJson(writeSeatLayout(dto.getSeatLayout()));
@@ -572,6 +625,12 @@ public class EventService {
         dto.setVenue(mapVenueToDTO(event.getVenue()));
         dto.setMinPrice(resolveSummaryMinPrice(event, eventPriceTiers, seats));
         dto.setSoldOut(isEventSoldOut(seats));
+        dto.setTotalSeats(seats.size());
+        dto.setAvailableSeats(countByStatus(seats, "AVAILABLE"));
+        dto.setLockedSeats(countByStatus(seats, "LOCKED", "WAITING", "HELD", "RESERVED"));
+        dto.setSoldSeats(countByStatus(seats, "BOOKED", "SOLD", "UNAVAILABLE"));
+        dto.setAverageRating(resolveAverageRating(event.getId()));
+        dto.setReviewCount(eventReviewRepository.countByEventId(event.getId()));
         return dto;
     }
 
@@ -675,7 +734,97 @@ public class EventService {
         dto.setPriceTiers(priceTierDTOs);
         dto.setSeats(seatDTOs);
         dto.setSeatLayout(readSeatLayout(event.getSeatLayoutJson()));
+        dto.setAverageRating(resolveAverageRating(event.getId()));
+        dto.setReviewCount(eventReviewRepository.countByEventId(event.getId()));
         return dto;
+    }
+
+    private double resolveAverageRating(Long eventId) {
+        Double average = eventReviewRepository.getAverageRatingByEventId(eventId);
+        if (average == null) {
+            return 0;
+        }
+        return Math.round(average * 10.0) / 10.0;
+    }
+
+    private boolean matchesKeyword(Event event, String keyword) {
+        if (keyword == null) {
+            return true;
+        }
+
+        String normalizedKeyword = keyword.toLowerCase(Locale.ROOT);
+        String searchableText = String.join(" ",
+                defaultIfBlank(event.getName(), ""),
+                defaultIfBlank(event.getDescription(), ""),
+                defaultIfBlank(event.getLocation(), ""),
+                defaultIfBlank(event.getOrganizer(), "")
+        ).toLowerCase(Locale.ROOT);
+
+        return searchableText.contains(normalizedKeyword);
+    }
+
+    private boolean matchesCategory(Event event, String categoryKey) {
+        if (categoryKey == null) {
+            return true;
+        }
+
+        return categoryKey.equals(normalizeCategoryKey(event.getCategory()))
+                || categoryKey.equals(inferCategoryKey(event));
+    }
+
+    private boolean matchesDateRange(Event event, LocalDateTime fromDate, LocalDateTime toDate) {
+        LocalDateTime startTime = event.getStartTime();
+        if (fromDate != null && (startTime == null || startTime.isBefore(fromDate))) {
+            return false;
+        }
+        return toDate == null || (startTime != null && !startTime.isAfter(toDate));
+    }
+
+    private String inferCategoryKey(Event event) {
+        String text = String.join(" ",
+                defaultIfBlank(event.getCategory(), ""),
+                defaultIfBlank(event.getName(), ""),
+                defaultIfBlank(event.getDescription(), "")
+        ).toLowerCase(Locale.ROOT);
+
+        if (text.matches(".*(conference|summit|tech).*")) {
+            return "conference";
+        }
+        if (text.contains("festival")) {
+            return "festival";
+        }
+        if (text.matches(".*(sport|match|final|arena|championship).*")) {
+            return "sports";
+        }
+        if (text.matches(".*(theater|theatre|opera|gala|drama|comedy).*")) {
+            return "theater";
+        }
+        return "concerts";
+    }
+
+    private String normalizeCategoryKey(String value) {
+        String normalized = trimToNull(value);
+        if (normalized == null || "all".equalsIgnoreCase(normalized)) {
+            return null;
+        }
+
+        String lower = normalized.toLowerCase(Locale.ROOT);
+        if (lower.matches("concerts?|music|orchestra")) {
+            return "concerts";
+        }
+        if (lower.matches("sports?|match|final|arena|championship")) {
+            return "sports";
+        }
+        if (lower.matches("theat(er|re)|opera|gala|drama|comedy")) {
+            return "theater";
+        }
+        if (lower.matches("conference|summit|tech")) {
+            return "conference";
+        }
+        if (lower.equals("festival")) {
+            return "festival";
+        }
+        return lower;
     }
 
     private String writeSeatLayout(JsonNode seatLayout) {

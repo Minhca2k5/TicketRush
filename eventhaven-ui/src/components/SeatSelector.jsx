@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Check, RefreshCcw, ShoppingBag, X } from "lucide-react";
 import { mapSeatLayoutToType, mapSeatsToType } from "@/lib/seat-types";
 import { EventHeader } from "./EventHeader";
@@ -8,11 +9,17 @@ import { SeatMap } from "./SeatMap";
 import { Legend } from "./Legend";
 import { BookingCart } from "./BookingCart";
 import { getSeatLayout, getSeatMap } from "../services/eventService";
-import { lockSeat, releaseSeat, checkout } from "../services/bookingService";
+import { lockSeat, releaseSeat, checkout, validateCoupon } from "../services/bookingService";
+import { getProfile } from "../services/authService";
+import { readUserSettings } from "../lib/userSettings";
 import SeatMapRenderer from "./seat-map/SeatMapRenderer";
+import { openSeatMapSocket } from "../services/seatRealtimeService";
 
 const HOLD_MINUTES = 10;
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_IDLE_MS = 5000;
+const POLL_INTERVAL_ACTIVE_MS = 3000;
+const REALTIME_RECONNECT_MS = 2500;
+const REALTIME_REFRESH_DEBOUNCE_MS = 150;
 const HOLDER_STORAGE_KEY = "ticketrush-seat-holder";
 const SELECTION_STORAGE_PREFIX = "ticketrush-seat-selection";
 const CONFLICT_TOAST_MESSAGE = "Ghế này vừa có người đặt, vui lòng chọn ghế khác";
@@ -26,6 +33,12 @@ function getOrCreateHolderId() {
   const generated = `holder-${crypto.randomUUID()}`;
   window.localStorage.setItem(HOLDER_STORAGE_KEY, generated);
   return generated;
+}
+
+function getAccountHolderId(profile) {
+  if (profile?.id) return `user-${profile.id}`;
+  if (profile?.username) return `user-${profile.username}`;
+  return null;
 }
 
 function normalizeCanvasSeatStatus(status) {
@@ -105,6 +118,7 @@ function getRestoredTimerStart(selectedSeats, storedExpirationTime) {
 }
 
 export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, initialLayout, initialCoordinateLayout }) {
+  const navigate = useNavigate();
   const [selectedSeats, setSelectedSeats] = useState([]);
   const [timerStart, setTimerStart] = useState(null);
   const [showMobileCart, setShowMobileCart] = useState(false);
@@ -123,11 +137,52 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [checkoutSuccess, setCheckoutSuccess] = useState(false);
   const [showHoldExpiredModal, setShowHoldExpiredModal] = useState(false);
+  const [userSettings, setUserSettings] = useState(null);
+  const [customerProfile, setCustomerProfile] = useState(null);
+  const [reminderShownFor, setReminderShownFor] = useState(null);
   const [orderId, setOrderId] = useState(null);
+  const [changedSeatIds, setChangedSeatIds] = useState([]);
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponError, setCouponError] = useState("");
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+
+  const handleApplyCoupon = async (code) => {
+    if (!code || !code.trim()) {
+      setCouponError("Vui lòng nhập mã giảm giá");
+      return;
+    }
+    setIsApplyingCoupon(true);
+    setCouponError("");
+    try {
+      const response = await validateCoupon(code, total);
+      if (response.success && response.data?.valid) {
+        setAppliedCoupon(response.data);
+        setToast({ type: "info", message: "Áp dụng mã giảm giá thành công!" });
+      } else {
+        setCouponError(response.message || response.data?.message || "Mã giảm giá không hợp lệ");
+        setAppliedCoupon(null);
+      }
+    } catch (err) {
+      setCouponError("Lỗi kiểm tra mã giảm giá");
+      setAppliedCoupon(null);
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponCode("");
+    setCouponError("");
+  };
+
   const holderIdRef = useRef(null);
   const selectedSeatsRef = useRef([]);
   const releaseExpiredInFlightRef = useRef(false);
   const hasHydratedSelectionRef = useRef(false);
+  const realtimeRefreshTimerRef = useRef(null);
+  const realtimeReconnectTimerRef = useRef(null);
 
   const mergeSeatDetails = useCallback((baseSeat, overrides = {}) => {
     const zoneName = resolveZoneName(baseSeat, resolveZoneName(overrides));
@@ -153,7 +208,53 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
 
   useEffect(() => {
     holderIdRef.current = getOrCreateHolderId();
+
+    let isActive = true;
+    getProfile()
+      .then((profile) => {
+        if (!isActive) return;
+        setCustomerProfile(profile);
+        setUserSettings(readUserSettings(profile));
+        const accountHolderId = getAccountHolderId(profile);
+        if (!accountHolderId) return;
+
+        holderIdRef.current = accountHolderId;
+        window.localStorage.setItem(HOLDER_STORAGE_KEY, accountHolderId);
+      })
+      .catch(() => {
+        // Keep the anonymous holder fallback so seat selection still works for older sessions.
+      });
+
+    return () => {
+      isActive = false;
+    };
   }, []);
+
+  useEffect(() => {
+    if (!userSettings?.bookingReminders || !timerStart || !selectedSeats.length) {
+      setReminderShownFor(null);
+      return undefined;
+    }
+
+    const reminderMs = Number(userSettings.holdReminderMinutes || 2) * 60 * 1000;
+    const expiresAt = timerStart + HOLD_MINUTES * 60 * 1000;
+    const reminderAt = expiresAt - reminderMs;
+    const key = `${eventId}:${expiresAt}`;
+
+    const showReminder = () => {
+      if (Date.now() >= reminderAt && Date.now() < expiresAt && reminderShownFor !== key) {
+        setReminderShownFor(key);
+        setToast({
+          type: "warning",
+          message: `Your held seats expire in about ${userSettings.holdReminderMinutes} minute(s).`,
+        });
+      }
+    };
+
+    showReminder();
+    const reminderTimer = window.setInterval(showReminder, 10000);
+    return () => window.clearInterval(reminderTimer);
+  }, [eventId, reminderShownFor, selectedSeats.length, timerStart, userSettings]);
 
   useEffect(() => {
     const holderId = holderIdRef.current;
@@ -216,6 +317,17 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
     }
   }, [eventId]);
 
+  const scheduleRealtimeSeatSync = useCallback(() => {
+    if (realtimeRefreshTimerRef.current) {
+      window.clearTimeout(realtimeRefreshTimerRef.current);
+    }
+
+    realtimeRefreshTimerRef.current = window.setTimeout(() => {
+      realtimeRefreshTimerRef.current = null;
+      syncSeatStatus({ silentError: true }).catch(() => {});
+    }, REALTIME_REFRESH_DEBOUNCE_MS);
+  }, [syncSeatStatus]);
+
   useEffect(() => {
     if (!eventId) {
       return undefined;
@@ -231,16 +343,88 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
     };
 
     guardedSync();
+    // Dynamic polling: faster when user has selected seats
+    const pollMs = selectedSeatsRef.current.length > 0 ? POLL_INTERVAL_ACTIVE_MS : POLL_INTERVAL_IDLE_MS;
     const interval = window.setInterval(() => {
       guardedSync({ silentError: true }).catch(() => {});
-    }, POLL_INTERVAL_MS);
+    }, pollMs);
     return () => {
       active = false;
       window.clearInterval(interval);
     };
-  }, [eventId, syncSeatStatus]);
+  }, [eventId, syncSeatStatus, selectedSeats.length]);
 
   useEffect(() => {
+    if (!eventId) {
+      return undefined;
+    }
+
+    let active = true;
+    let socket = null;
+
+    const connect = () => {
+      if (!active) {
+        return;
+      }
+
+      socket = openSeatMapSocket(eventId, {
+        onOpen: () => {
+          setSyncMessage("");
+          scheduleRealtimeSeatSync();
+        },
+        onMessage: (message) => {
+          if (message?.type !== "SEAT_MAP_UPDATED") {
+            return;
+          }
+          if (String(message.eventId) !== String(eventId)) {
+            return;
+          }
+          scheduleRealtimeSeatSync();
+        },
+        onClose: () => {
+          if (!active) {
+            return;
+          }
+          realtimeReconnectTimerRef.current = window.setTimeout(connect, REALTIME_RECONNECT_MS);
+        },
+      });
+    };
+
+    connect();
+
+    return () => {
+      active = false;
+      if (realtimeReconnectTimerRef.current) {
+        window.clearTimeout(realtimeReconnectTimerRef.current);
+        realtimeReconnectTimerRef.current = null;
+      }
+      if (realtimeRefreshTimerRef.current) {
+        window.clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = null;
+      }
+      if (socket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(socket.readyState)) {
+        socket.close();
+      }
+    };
+  }, [eventId, scheduleRealtimeSeatSync]);
+
+  useEffect(() => {
+    // Detect changed seats for visual flash
+    setChangedSeatIds((prev) => {
+      const changed = liveSeats
+        .filter((seat) => {
+          const oldSeat = selectedSeatsRef.current.find((s) => s.id === seat.id);
+          return oldSeat && oldSeat.status !== seat.status;
+        })
+        .map((s) => s.id);
+      return changed;
+    });
+    // Clear flash after animation
+    if (changedSeatIds.length) {
+      const timer = setTimeout(() => setChangedSeatIds([]), 1200);
+      return () => clearTimeout(timer);
+    }
+
     setSelectedSeats((previous) => {
       const retainableSeatIds = new Set(
         liveSeats
@@ -258,6 +442,27 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
       return nextSelection;
     });
   }, [liveSeats]);
+
+  useEffect(() => {
+    if (appliedCoupon && selectedSeats.length > 0) {
+      validateCoupon(couponCode, total)
+        .then((response) => {
+          if (response.success && response.data?.valid) {
+            setAppliedCoupon(response.data);
+          } else {
+            setAppliedCoupon(null);
+            setCouponError(response.message || "Mã giảm giá không còn hiệu lực cho đơn hàng này");
+          }
+        })
+        .catch(() => {
+          setAppliedCoupon(null);
+        });
+    } else if (selectedSeats.length === 0) {
+      setAppliedCoupon(null);
+      setCouponCode("");
+      setCouponError("");
+    }
+  }, [total, selectedSeats.length]);
 
   useEffect(() => {
     const holderId = holderIdRef.current;
@@ -454,20 +659,27 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
     setIsCheckoutLoading(true);
     try {
       const seatIds = selectedSeats.map(s => s.id);
-      const order = await checkout(eventId, seatIds, holderIdRef.current);
+      const codeToApply = appliedCoupon ? couponCode : '';
+      const order = await checkout(eventId, seatIds, holderIdRef.current, {
+        email: customerProfile?.email,
+        name: customerProfile?.username,
+      }, codeToApply);
       setOrderId(order.id);
       setCheckoutSuccess(true);
       setSelectedSeats([]);
       setTimerStart(null);
+      setAppliedCoupon(null);
+      setCouponCode("");
       // Trigger a sync so the map turns the seats to SOLD
       await syncSeatStatus({ silentError: true });
     } catch (err) {
-      setSyncMessage("Checkout failed. Your session may have expired.");
-      setToast({ type: "warning", message: "Checkout failed. Your session may have expired." });
+      const errMsg = err.response?.data?.message || err.message || "Checkout failed. Your session may have expired.";
+      setSyncMessage(errMsg);
+      setToast({ type: "warning", message: errMsg });
     } finally {
       setIsCheckoutLoading(false);
     }
-  }, [eventId, selectedSeats, syncSeatStatus]);
+  }, [customerProfile, eventId, selectedSeats, syncSeatStatus, appliedCoupon, couponCode]);
 
   const total = useMemo(
     () => selectedSeats.reduce((sum, seat) => sum + Number(seat.price || 0), 0),
@@ -483,15 +695,16 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
       heldByCurrentUser: selectedSeats.some((selectedSeat) => String(selectedSeat.id) === String(seat.id))
         || (seat.status === "LOCKED" && seat.lockHolder === holderIdRef.current),
       pending: seatActionInFlight.includes(seat.id),
+      justChanged: changedSeatIds.includes(seat.id),
     }))
-  ), [liveSeats, seatActionInFlight, selectedSeats]);
+  ), [liveSeats, seatActionInFlight, selectedSeats, changedSeatIds]);
   const syncLabel = useMemo(() => new Date(lastSyncAt).toLocaleTimeString(), [lastSyncAt]);
   const hasSeatInventory = seats.length > 0;
   const hasCoordinateLayout = Array.isArray(coordinateLayout?.zones) && coordinateLayout.zones.length > 0;
 
   return (
-    <div className="bg-[linear-gradient(180deg,#f8faff_0%,#eef2ff_100%)]">
-      <main className="mx-auto max-w-7xl px-4 py-8 lg:px-8 lg:py-10">
+    <div className="bg-[linear-gradient(180deg,#f6f8fc_0%,#eef3f8_48%,#f8fafc_100%)]">
+      <main className="mx-auto max-w-[1760px] px-4 py-8 lg:px-8 lg:py-10">
         <EventHeader event={event} />
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-white/70 bg-white/80 px-5 py-4 text-sm text-slate-600 shadow-sm">
@@ -515,29 +728,33 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
             ) : null}
             <span className="inline-flex items-center gap-2 text-slate-500">
               <RefreshCcw size={16} className={isSyncing ? "animate-spin" : ""} />
-              Auto-refresh every 5s
+              Realtime WebSocket + polling fallback
             </span>
           </div>
         </div>
 
-        <div className="mt-8 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="space-y-6">
+        <div className="mt-8 grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
+          <div className="space-y-6 xl:col-span-9">
             {hasCoordinateLayout ? (
-              <div className="rounded-[28px] border border-white/70 bg-white/85 p-5 shadow-sm md:p-6">
+              <div className="rounded-[28px] border border-white/70 bg-white/85 p-4 shadow-sm md:p-5">
                 <div className="mb-5">
                   <h3 className="text-lg font-bold text-slate-900">Interactive Seat Map</h3>
                   <p className="text-sm text-slate-500">
                     The venue layout is rendered from the admin design canvas, including stage, field, exits, zones, and rotation.
                   </p>
                 </div>
-                <SeatMapRenderer
-                  isEditable={false}
-                  eventId={eventId}
-                  layout={coordinateLayout}
-                  liveSeats={rawLiveSeats}
-                  selectedSeats={selectedSeats.map((seat) => ({ seat }))}
-                  onToggleSeat={handleCanvasSeatSelect}
-                />
+                <div className="h-[calc(100vh-220px)] min-h-[620px]">
+                  <SeatMapRenderer
+                    isEditable={false}
+                    eventId={eventId}
+                    layout={coordinateLayout}
+                    liveSeats={rawLiveSeats}
+                    selectedSeats={selectedSeats.map((seat) => ({ seat }))}
+                    canvasTheme="light"
+                    fillViewport
+                    onToggleSeat={handleCanvasSeatSelect}
+                  />
+                </div>
               </div>
             ) : (
               <SeatMap
@@ -555,7 +772,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
             ) : null}
           </div>
 
-          <aside className="hidden xl:block">
+          <aside className="hidden xl:col-span-3 xl:block">
             <div className="sticky top-24">
               <BookingCart
                 selectedSeats={selectedSeats}
@@ -565,6 +782,13 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
                 timerStart={timerStart}
                 expiresAt={selectionExpiresAt}
                 total={total}
+                couponCode={couponCode}
+                setCouponCode={setCouponCode}
+                appliedCoupon={appliedCoupon}
+                onApplyCoupon={handleApplyCoupon}
+                onRemoveCoupon={handleRemoveCoupon}
+                couponError={couponError}
+                isApplyingCoupon={isApplyingCoupon}
               />
             </div>
           </aside>
@@ -607,6 +831,13 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
               timerStart={timerStart}
               expiresAt={selectionExpiresAt}
               total={total}
+              couponCode={couponCode}
+              setCouponCode={setCouponCode}
+              appliedCoupon={appliedCoupon}
+              onApplyCoupon={handleApplyCoupon}
+              onRemoveCoupon={handleRemoveCoupon}
+              couponError={couponError}
+              isApplyingCoupon={isApplyingCoupon}
             />
           </div>
         </div>
@@ -627,7 +858,10 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
                 </p>
                 <button
                   type="button"
-                  onClick={() => setShowBookingConfirm(false)}
+                  onClick={() => {
+                    setShowBookingConfirm(false);
+                    navigate("/orders");
+                  }}
                   className="mt-6 rounded-full bg-green-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-green-500"
                 >
                   View My Tickets
@@ -639,9 +873,27 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
                   <ShoppingBag size={30} />
                 </div>
                 <h3 className="mt-5 text-2xl font-black text-slate-950">Confirm Purchase</h3>
-                <p className="mt-3 text-sm leading-7 text-slate-500">
-                  You are about to purchase {selectedSeats.length} ticket(s) for a total of ${total.toLocaleString()}.
-                </p>
+                {appliedCoupon ? (
+                  <div className="mt-3 text-sm text-slate-500 space-y-1.5 border border-slate-100 bg-slate-50 p-4 rounded-2xl">
+                    <p>You are about to purchase {selectedSeats.length} ticket(s).</p>
+                    <div className="flex justify-between items-center text-xs">
+                      <span>Subtotal:</span>
+                      <span className="line-through">${total.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-green-600 font-semibold">
+                      <span>Discount ({couponCode.toUpperCase()}):</span>
+                      <span>-${appliedCoupon.discountAmount.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-base font-black text-slate-950 border-t border-slate-200 pt-1.5">
+                      <span>Total:</span>
+                      <span>${appliedCoupon.finalPrice.toLocaleString()}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm leading-7 text-slate-500">
+                    You are about to purchase {selectedSeats.length} ticket(s) for a total of ${total.toLocaleString()}.
+                  </p>
+                )}
                 <button
                   type="button"
                   disabled={isCheckoutLoading}

@@ -4,30 +4,34 @@ import {
   CalendarDays,
   FileBarChart2,
   LifeBuoy,
+  Menu,
   Search,
   Settings,
   ShieldCheck,
+  Tag,
   Ticket,
   TrendingUp,
   Users,
-  Wallet,
+  X,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { getAuthDashboardSummary } from '../services/authService';
 import { UserMenu } from './UserMenu';
 
 const sidebarMain = [
   { label: 'Dashboard', icon: BarChart3, to: '/admin/dashboard' },
   { label: 'Events Management', icon: CalendarDays, to: '/admin/events' },
   { label: 'Ticket Sales', icon: Ticket, to: '/admin/sales' },
-  { label: 'Customer Database', icon: Users },
-  { label: 'System Reports', icon: FileBarChart2 },
-  { label: 'Admin Settings', icon: Settings },
+  { label: 'Customer Database', icon: Users, to: '/admin/customers' },
+  { label: 'System Reports', icon: FileBarChart2, to: '/admin/reports' },
+  { label: 'Coupon Codes', icon: Tag, to: '/admin/coupons' },
+  { label: 'Admin Settings', icon: Settings, to: '/admin/settings' },
 ];
 
 const sidebarSupport = [
-  { label: 'Help & Support', icon: LifeBuoy },
-  { label: 'System Status', icon: ShieldCheck },
+  { label: 'Help & Support', icon: LifeBuoy, to: '/admin/help' },
+  { label: 'System Status', icon: ShieldCheck, to: '/admin/status' },
 ];
 
 function formatDate(value) {
@@ -55,21 +59,30 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const [events, setEvents] = useState([]);
+  const [authSummary, setAuthSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState('');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     let ignore = false;
 
-    const loadEvents = async () => {
+    const loadDashboard = async () => {
       try {
-        const response = await api.get('/events');
-        const raw = response.data?.data?.content || response.data?.data || response.data || [];
+        const [eventsResponse, authData] = await Promise.all([
+          api.get('/events'),
+          getAuthDashboardSummary(),
+        ]);
+        const raw = eventsResponse.data?.data?.content || eventsResponse.data?.data || eventsResponse.data || [];
         if (!ignore) {
           setEvents(Array.isArray(raw) ? raw : []);
+          setAuthSummary(authData || null);
         }
-      } catch {
+      } catch (error) {
         if (!ignore) {
           setEvents([]);
+          setAuthSummary(null);
+          setSummaryError(error.response?.data?.error || 'Dashboard metrics are temporarily unavailable.');
         }
       } finally {
         if (!ignore) {
@@ -78,7 +91,7 @@ export default function AdminDashboard() {
       }
     };
 
-    loadEvents();
+    loadDashboard();
     return () => {
       ignore = true;
     };
@@ -87,44 +100,46 @@ export default function AdminDashboard() {
   const dashboardMetrics = useMemo(() => {
     const totalEvents = events.length;
     const liveEvents = events.filter((event) => inferStatus(event) === 'LIVE').length;
-    const projectedRevenue = events.reduce((sum, _event, index) => sum + (8500 + index * 2100), 0);
-    const pendingApprovals = events.filter((event) => inferStatus(event) === 'PENDING').length;
+    const totalUsers = authSummary?.userCount || 0;
+    const profileCompletionRate = totalUsers
+      ? Math.round(((authSummary?.profileCompletionCount || 0) / totalUsers) * 100)
+      : 0;
 
     return [
       {
-        label: 'Total Active Events',
+        label: 'Catalog Events',
         value: totalEvents,
-        delta: '+12% vs last week',
+        delta: `${liveEvents} live now`,
         icon: BarChart3,
         surface: 'from-sky-50 to-blue-50',
         iconBg: 'bg-sky-100 text-sky-600',
       },
       {
-        label: 'Live Events',
-        value: liveEvents,
-        delta: '+5% vs yesterday',
-        icon: Ticket,
+        label: 'Registered Users',
+        value: totalUsers,
+        delta: `${authSummary?.customerCount || 0} customers`,
+        icon: Users,
         surface: 'from-emerald-50 to-green-50',
         iconBg: 'bg-emerald-100 text-emerald-600',
       },
       {
-        label: 'Projected Revenue',
-        value: `$${projectedRevenue.toLocaleString()}`,
-        delta: '+23% vs last month',
-        icon: Wallet,
+        label: 'Profile Completion',
+        value: `${profileCompletionRate}%`,
+        delta: `${authSummary?.profileCompletionCount || 0} complete profiles`,
+        icon: ShieldCheck,
         surface: 'from-fuchsia-50 to-violet-50',
         iconBg: 'bg-violet-100 text-violet-600',
       },
       {
-        label: 'Pending Approvals',
-        value: pendingApprovals,
-        delta: pendingApprovals ? `${pendingApprovals} waiting review` : 'No pending approvals',
+        label: 'Average Age',
+        value: authSummary?.averageAge ? Math.round(authSummary.averageAge) : 0,
+        delta: `${authSummary?.adminCount || 0} admin accounts`,
         icon: TrendingUp,
         surface: 'from-amber-50 to-orange-50',
         iconBg: 'bg-amber-100 text-amber-600',
       },
     ];
-  }, [events]);
+  }, [authSummary, events]);
 
   const recentEvents = useMemo(() => (
     [...events]
@@ -132,54 +147,81 @@ export default function AdminDashboard() {
       .slice(0, 5)
   ), [events]);
 
+  const demographicTotal = (authSummary?.maleCount || 0) + (authSummary?.femaleCount || 0);
+  const malePercent = demographicTotal ? Math.round(((authSummary?.maleCount || 0) / demographicTotal) * 100) : 0;
+  const femalePercent = demographicTotal ? 100 - malePercent : 0;
+
+  const renderSidebarContent = () => (
+    <>
+      <div className="px-5 py-7">
+        <p className="px-4 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Main</p>
+        <div className="mt-4 space-y-2">
+          {sidebarMain.map(({ label, icon: Icon, to }) => {
+            const isActive = to ? location.pathname.startsWith(to) : false;
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={() => { if (to) navigate(to); setMobileSidebarOpen(false); }}
+                className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
+                  isActive ? 'bg-violet-50 text-violet-700 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.35)]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <Icon size={17} />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="mt-auto border-t border-[#e8edf4] px-5 py-7">
+        <p className="px-4 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Support</p>
+        <div className="mt-4 space-y-2">
+          {sidebarSupport.map(({ label, icon: Icon, to }) => {
+            const isActive = location.pathname.startsWith(to);
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={() => { navigate(to); setMobileSidebarOpen(false); }}
+                className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
+                  isActive ? 'bg-violet-50 text-violet-700 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.35)]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <Icon size={17} />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <div className="min-h-screen bg-[#f4f7fb] font-sans text-slate-900">
+      {/* Mobile sidebar */}
+      {mobileSidebarOpen && (
+        <>
+          <div className="admin-sidebar-overlay lg:hidden" onClick={() => setMobileSidebarOpen(false)} />
+          <div className="admin-sidebar-mobile lg:hidden">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <span className="text-lg font-black text-slate-900">Menu</span>
+              <button type="button" onClick={() => setMobileSidebarOpen(false)} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100">
+                <X size={20} />
+              </button>
+            </div>
+            {renderSidebarContent()}
+          </div>
+        </>
+      )}
+
       <div className="grid min-h-screen lg:grid-cols-[300px_minmax(0,1fr)]">
-        <aside className="border-r border-[#dde6f0] bg-white">
-          <div className="flex items-center gap-4 border-b border-[#e8edf4] px-8 py-7">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-b from-violet-500 to-indigo-600 text-white shadow-lg shadow-violet-500/25">
-              <Ticket size={18} />
-            </div>
-            <div>
-              <p className="text-lg font-black text-slate-950">TicketRush</p>
-              <p className="text-sm text-slate-500">Admin Portal</p>
-            </div>
-          </div>
-
-          <div className="px-5 py-7">
-            <p className="px-4 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Main</p>
-            <div className="mt-4 space-y-2">
-              {sidebarMain.map(({ label, icon: Icon, to }) => {
-                const isActive = to ? location.pathname.startsWith(to) : false;
-                return (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => to && navigate(to)}
-                    className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
-                      isActive ? 'bg-violet-50 text-violet-700 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.35)]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                    }`}
-                  >
-                    <Icon size={17} />
-                    <span>{label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="mt-auto border-t border-[#e8edf4] px-5 py-7">
-            <p className="px-4 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Support</p>
-            <div className="mt-4 space-y-2">
-              {sidebarSupport.map(({ label, icon: Icon }) => (
-                <button key={label} type="button" className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900">
-                  <Icon size={17} />
-                  <span>{label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+        {/* Desktop sidebar */}
+        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] self-start flex-col overflow-y-auto border-r border-[#dde6f0] bg-white lg:flex">
+          {renderSidebarContent()}
         </aside>
+
 
         <div className="min-w-0">
           <header className="hidden">
@@ -201,11 +243,20 @@ export default function AdminDashboard() {
             </div>
           </header>
 
-          <main className="px-6 py-6 lg:px-8">
+          <main className="px-4 py-6 sm:px-6 lg:px-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setMobileSidebarOpen(true)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 shadow-sm lg:hidden"
+                >
+                  <Menu size={18} />
+                </button>
               <div>
                 <h1 className="text-3xl font-black tracking-tight text-slate-950">Event Overview Dashboard</h1>
-                <p className="mt-2 text-sm text-slate-500">Track live inventory, upcoming events, and admin-side event performance.</p>
+                <p className="mt-2 text-sm text-slate-500">Track event inventory, users, and profile demographics from the live services.</p>
+              </div>
               </div>
               <button
                 onClick={() => navigate('/admin/events')}
@@ -233,20 +284,57 @@ export default function AdminDashboard() {
               ))}
             </section>
 
+            {summaryError && (
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                {summaryError}
+              </div>
+            )}
+
             <section className="mt-6 grid gap-6 xl:grid-cols-2">
               <div className="rounded-[28px] border border-[#dfe7f2] bg-white p-6 shadow-[0_12px_36px_rgba(15,23,42,0.05)]">
-                <h2 className="text-xl font-black text-slate-950">Event Growth Trend</h2>
-                <p className="mt-2 text-sm text-slate-500">Last 30 days</p>
-                <div className="mt-6 flex h-[240px] items-center justify-center rounded-[24px] border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400">
-                  Chart area placeholder
+                <h2 className="text-xl font-black text-slate-950">Audience Demographics</h2>
+                <p className="mt-2 text-sm text-slate-500">Gender split from completed customer profiles.</p>
+                <div className="mt-6 space-y-5">
+                  <div>
+                    <div className="mb-2 flex items-center justify-between text-sm font-bold text-slate-600">
+                      <span>Male</span>
+                      <span>{authSummary?.maleCount || 0} users</span>
+                    </div>
+                    <div className="h-4 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-sky-500" style={{ width: `${malePercent}%` }} />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mb-2 flex items-center justify-between text-sm font-bold text-slate-600">
+                      <span>Female</span>
+                      <span>{authSummary?.femaleCount || 0} users</span>
+                    </div>
+                    <div className="h-4 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-violet-500" style={{ width: `${femalePercent}%` }} />
+                    </div>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">
+                    {demographicTotal} users have supplied demographic details.
+                  </div>
                 </div>
               </div>
 
               <div className="rounded-[28px] border border-[#dfe7f2] bg-white p-6 shadow-[0_12px_36px_rgba(15,23,42,0.05)]">
-                <h2 className="text-xl font-black text-slate-950">Ticket Sales by Category</h2>
-                <p className="mt-2 text-sm text-slate-500">Distribution across event types</p>
-                <div className="mt-6 flex h-[240px] items-center justify-center rounded-[24px] border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400">
-                  Chart area placeholder
+                <h2 className="text-xl font-black text-slate-950">Account Mix</h2>
+                <p className="mt-2 text-sm text-slate-500">Admin and customer distribution from auth-service.</p>
+                <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-3xl bg-emerald-50 p-5">
+                    <p className="text-sm font-bold text-emerald-700">Customers</p>
+                    <p className="mt-3 text-4xl font-black text-emerald-950">{authSummary?.customerCount || 0}</p>
+                  </div>
+                  <div className="rounded-3xl bg-violet-50 p-5">
+                    <p className="text-sm font-bold text-violet-700">Admins</p>
+                    <p className="mt-3 text-4xl font-black text-violet-950">{authSummary?.adminCount || 0}</p>
+                  </div>
+                  <div className="rounded-3xl bg-slate-50 p-5 sm:col-span-2">
+                    <p className="text-sm font-bold text-slate-600">Completed Profiles</p>
+                    <p className="mt-3 text-4xl font-black text-slate-950">{authSummary?.profileCompletionCount || 0}</p>
+                  </div>
                 </div>
               </div>
             </section>
