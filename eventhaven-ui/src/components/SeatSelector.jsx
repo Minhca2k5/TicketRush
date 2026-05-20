@@ -147,6 +147,11 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
   const [couponError, setCouponError] = useState("");
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
 
+  const total = useMemo(
+    () => selectedSeats.reduce((sum, seat) => sum + Number(seat.price || 0), 0),
+    [selectedSeats]
+  );
+
   const handleApplyCoupon = async (code) => {
     if (!code || !code.trim()) {
       setCouponError("Vui lòng nhập mã giảm giá");
@@ -681,10 +686,6 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
     }
   }, [customerProfile, eventId, selectedSeats, syncSeatStatus, appliedCoupon, couponCode]);
 
-  const total = useMemo(
-    () => selectedSeats.reduce((sum, seat) => sum + Number(seat.price || 0), 0),
-    [selectedSeats]
-  );
   const selectionExpiresAt = useMemo(() => {
     const expirationTime = getSelectionExpirationTime(selectedSeats);
     return expirationTime ? new Date(expirationTime).toISOString() : null;
