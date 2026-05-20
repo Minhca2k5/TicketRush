@@ -3,7 +3,7 @@ package com.ticketrush.bookingservice.dto;
 import com.ticketrush.bookingservice.entity.Notification;
 import lombok.Data;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Data
 public class NotificationDTO {
@@ -16,8 +16,8 @@ public class NotificationDTO {
     private Long eventId;
     private Long seatId;
     private boolean read;
-    private LocalDateTime createdAt;
-    private LocalDateTime readAt;
+    private Instant createdAt;
+    private Instant readAt;
 
     public static NotificationDTO fromEntity(Notification notification) {
         NotificationDTO dto = new NotificationDTO();

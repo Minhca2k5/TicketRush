@@ -23,8 +23,22 @@ function getAccountHolderId(profile) {
 function normalizeNotification(notification) {
   return {
     ...notification,
-    time: notification.createdAt ? new Date(notification.createdAt) : new Date(),
+    time: parseNotificationDate(notification.createdAt) || new Date(),
   };
+}
+
+function parseNotificationDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  const hasTimeZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
+  const date = new Date(hasTimeZone ? normalized : `${normalized}Z`);
+
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function getNotificationIcon(type) {
