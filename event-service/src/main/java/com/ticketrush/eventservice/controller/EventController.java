@@ -11,9 +11,9 @@ import com.ticketrush.eventservice.dto.SeatCreationRequest;
 import com.ticketrush.eventservice.dto.SeatLockRequestDTO;
 import com.ticketrush.eventservice.dto.SeatPurchaseRequestDTO;
 import com.ticketrush.eventservice.dto.SeatReleaseRequestDTO;
+import com.ticketrush.eventservice.service.CloudinaryBannerStorageService;
 import com.ticketrush.eventservice.service.EventService;
 import com.ticketrush.eventservice.service.SeatService;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -34,7 +34,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/events")
@@ -43,6 +42,7 @@ public class EventController {
     private final EventService eventService;
     private final SeatService seatService;
     private final ObjectMapper objectMapper;
+    private final CloudinaryBannerStorageService bannerStorageService;
     private final Path bannerUploadDirectory;
     private static final Set<String> ALLOWED_BANNER_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp");
 
@@ -50,11 +50,13 @@ public class EventController {
             EventService eventService,
             SeatService seatService,
             ObjectMapper objectMapper,
+            CloudinaryBannerStorageService bannerStorageService,
             @Value("${app.upload.banner-dir:uploads/event-banners}") String bannerUploadDirectory
     ) {
         this.eventService = eventService;
         this.seatService = seatService;
         this.objectMapper = objectMapper;
+        this.bannerStorageService = bannerStorageService;
         this.bannerUploadDirectory = Paths.get(bannerUploadDirectory).toAbsolutePath().normalize();
     }
 
@@ -101,11 +103,10 @@ public class EventController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<EventDTO>> createEventMultipart(
             @RequestPart("payload") String payload,
-            @RequestPart(value = "bannerFile", required = false) MultipartFile bannerFile,
-            HttpServletRequest request
+            @RequestPart(value = "bannerFile", required = false) MultipartFile bannerFile
     ) {
         EventDTO eventDTO = readPayload(payload);
-        applyBannerUpload(eventDTO, bannerFile, request);
+        applyBannerUpload(eventDTO, bannerFile);
         return ResponseEntity.ok(ApiResponse.success("Event created successfully", eventService.createEvent(eventDTO)));
     }
 
@@ -118,11 +119,10 @@ public class EventController {
     public ResponseEntity<ApiResponse<EventDTO>> updateEventMultipart(
             @PathVariable Long id,
             @RequestPart("payload") String payload,
-            @RequestPart(value = "bannerFile", required = false) MultipartFile bannerFile,
-            HttpServletRequest request
+            @RequestPart(value = "bannerFile", required = false) MultipartFile bannerFile
     ) {
         EventDTO eventDTO = readPayload(payload);
-        applyBannerUpload(eventDTO, bannerFile, request);
+        applyBannerUpload(eventDTO, bannerFile);
         return ResponseEntity.ok(ApiResponse.success("Event updated successfully", eventService.updateEvent(id, eventDTO)));
     }
 
@@ -225,7 +225,7 @@ public class EventController {
         }
     }
 
-    private void applyBannerUpload(EventDTO eventDTO, MultipartFile bannerFile, HttpServletRequest request) {
+    private void applyBannerUpload(EventDTO eventDTO, MultipartFile bannerFile) {
         if (bannerFile == null || bannerFile.isEmpty()) {
             return;
         }
@@ -236,18 +236,9 @@ public class EventController {
             throw new RuntimeException("Banner image must be a JPG, PNG, JPEG, or WEBP file");
         }
 
-        try {
-            Files.createDirectories(bannerUploadDirectory);
-            String storedFileName = UUID.randomUUID() + "." + extension;
-            Path destination = bannerUploadDirectory.resolve(storedFileName).normalize();
-            bannerFile.transferTo(destination);
-
-            String publicUrl = buildBannerPublicUrl(request, storedFileName);
-            eventDTO.setImageUrl(publicUrl);
-            eventDTO.setBannerUrl(publicUrl);
-        } catch (IOException exception) {
-            throw new RuntimeException("Unable to store banner image");
-        }
+        String publicUrl = bannerStorageService.uploadBanner(bannerFile);
+        eventDTO.setImageUrl(publicUrl);
+        eventDTO.setBannerUrl(publicUrl);
     }
 
     private String getExtension(String filename) {
@@ -257,14 +248,4 @@ public class EventController {
         return filename.substring(filename.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
     }
 
-    private String buildBannerPublicUrl(HttpServletRequest request, String filename) {
-        String forwardedProto = request.getHeader("X-Forwarded-Proto");
-        String forwardedHost = request.getHeader("X-Forwarded-Host");
-        String scheme = forwardedProto != null && !forwardedProto.isBlank() ? forwardedProto : request.getScheme();
-        String host = forwardedHost != null && !forwardedHost.isBlank()
-                ? forwardedHost
-                : request.getServerName() + (request.getServerPort() > 0 ? ":" + request.getServerPort() : "");
-
-        return scheme + "://" + host + "/api/events/uploads/event-banners/" + filename;
-    }
 }

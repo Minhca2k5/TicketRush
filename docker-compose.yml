@@ -47,6 +47,10 @@ services:
       DB_USERNAME: minh
       DB_PASSWORD: minh123
       BOOKING_SERVICE_URL: http://booking-service:8083
+      CLOUDINARY_CLOUD_NAME: "${CLOUDINARY_CLOUD_NAME:-}"
+      CLOUDINARY_API_KEY: "${CLOUDINARY_API_KEY:-}"
+      CLOUDINARY_API_SECRET: "${CLOUDINARY_API_SECRET:-}"
+      CLOUDINARY_FOLDER: "${CLOUDINARY_FOLDER:-ticketrush/event-banners}"
     ports:
       - "8082:8082"
     volumes:
