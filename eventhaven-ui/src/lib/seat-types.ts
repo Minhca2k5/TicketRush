@@ -80,6 +80,15 @@ export function normalizeSeatStatus(status: string | undefined | null): SeatStat
   return "AVAILABLE";
 }
 
+export function parseLockExpiresAt(lockExpiresAt: string | number | null | undefined): number {
+  if (!lockExpiresAt) return 0;
+  const str = String(lockExpiresAt);
+  const hasTimezone = str.endsWith('Z') || /([+-]\d{2}:\d{2})$/.test(str);
+  const formatted = hasTimezone ? str : str + 'Z';
+  const parsed = new Date(formatted).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 // Convert backend seat data to Seat type
 export function mapSeatsToType(backendSeats: any[]): Seat[] {
   return backendSeats.map((s) => {

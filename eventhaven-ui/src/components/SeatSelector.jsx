@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Check, RefreshCcw, ShoppingBag, X } from "lucide-react";
-import { mapSeatLayoutToType, mapSeatsToType } from "@/lib/seat-types";
+import { mapSeatLayoutToType, mapSeatsToType, parseLockExpiresAt } from "@/lib/seat-types";
 import { EventHeader } from "./EventHeader";
 import { SeatMap } from "./SeatMap";
 import { Legend } from "./Legend";
@@ -106,8 +106,8 @@ function writeStoredSelection(eventId, holderId, payload) {
 
 function getSelectionExpirationTime(selectedSeats) {
   return selectedSeats
-    .map((seat) => new Date(seat.lockExpiresAt || 0).getTime())
-    .filter((value) => !Number.isNaN(value) && value > Date.now())
+    .map((seat) => parseLockExpiresAt(seat.lockExpiresAt))
+    .filter((value) => value > 0 && value > Date.now())
     .sort((first, second) => first - second)[0];
 }
 
@@ -134,6 +134,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
   const [syncMessage, setSyncMessage] = useState("");
   const [seatActionInFlight, setSeatActionInFlight] = useState([]);
   const [toast, setToast] = useState(null);
+  const [isProfileLoaded, setIsProfileLoaded] = useState(false);
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [checkoutSuccess, setCheckoutSuccess] = useState(false);
   const [showHoldExpiredModal, setShowHoldExpiredModal] = useState(false);
@@ -221,13 +222,19 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
         setCustomerProfile(profile);
         setUserSettings(readUserSettings(profile));
         const accountHolderId = getAccountHolderId(profile);
-        if (!accountHolderId) return;
+        if (!accountHolderId) {
+          setIsProfileLoaded(true);
+          return;
+        }
 
         holderIdRef.current = accountHolderId;
         window.localStorage.setItem(HOLDER_STORAGE_KEY, accountHolderId);
+        setIsProfileLoaded(true);
       })
       .catch(() => {
+        if (!isActive) return;
         // Keep the anonymous holder fallback so seat selection still works for older sessions.
+        setIsProfileLoaded(true);
       });
 
     return () => {
@@ -471,7 +478,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
 
   useEffect(() => {
     const holderId = holderIdRef.current;
-    if (!eventId || !holderId || hasHydratedSelectionRef.current || !liveSeats.length) {
+    if (!eventId || !holderId || !isProfileLoaded || hasHydratedSelectionRef.current || !liveSeats.length) {
       return;
     }
 
@@ -485,8 +492,8 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
       const seatId = String(seat.id);
       const status = String(seat.status || "").toUpperCase();
       const isStoredSeat = storedSeatIds.has(seatId);
-      const expiresAt = new Date(seat.lockExpiresAt || storedExpirationTime || 0).getTime();
-      const seatHoldStillValid = !expiresAt || Number.isNaN(expiresAt) || expiresAt > Date.now();
+      const expiresAt = seat.lockExpiresAt ? parseLockExpiresAt(seat.lockExpiresAt) : (storedExpirationTime || 0);
+      const seatHoldStillValid = !expiresAt || expiresAt > Date.now();
       const isHeldByHolder = seat.lockHolder === holderId;
       const isRecoverableStoredLock = hasValidStoredHold && isStoredSeat && status === "LOCKED";
 
@@ -513,7 +520,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
     setSelectedSeats(restoredSeats);
     setTimerStart(getRestoredTimerStart(restoredSeats, stored?.expirationTime));
     hasHydratedSelectionRef.current = true;
-  }, [eventId, liveSeats, mergeSeatDetails]);
+  }, [eventId, liveSeats, isProfileLoaded, mergeSeatDetails]);
 
   const mutateSeatInFlight = useCallback((seatId, shouldAdd) => {
     setSeatActionInFlight((previous) =>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Clock3, Ticket, Trash2 } from 'lucide-react';
+import { parseLockExpiresAt } from '@/lib/seat-types';
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -41,8 +42,8 @@ export function BookingCart({
 
     const tick = () => {
       if (expiresAt) {
-        const expiresAtMs = new Date(expiresAt).getTime();
-        if (!Number.isNaN(expiresAtMs)) {
+        const expiresAtMs = parseLockExpiresAt(expiresAt);
+        if (expiresAtMs > 0) {
           setRemaining(Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 1000)));
           return;
         }
@@ -50,8 +51,8 @@ export function BookingCart({
 
       if (selectedSeats.length) {
         const seatExpiresAt = selectedSeats
-          .map((seat) => new Date(seat.lockExpiresAt || 0).getTime())
-          .filter((value) => !Number.isNaN(value) && value > Date.now())
+          .map((seat) => parseLockExpiresAt(seat.lockExpiresAt))
+          .filter((value) => value > Date.now())
           .sort((first, second) => first - second)[0];
 
         if (seatExpiresAt) {
