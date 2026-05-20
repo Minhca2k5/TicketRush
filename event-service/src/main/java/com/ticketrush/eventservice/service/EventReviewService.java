@@ -8,8 +8,10 @@ import com.ticketrush.eventservice.entity.EventReview;
 import com.ticketrush.eventservice.repository.EventRepository;
 import com.ticketrush.eventservice.repository.EventReviewRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -19,6 +21,7 @@ import java.util.List;
 public class EventReviewService {
     private final EventRepository eventRepository;
     private final EventReviewRepository reviewRepository;
+    private final BookingAccessClient bookingAccessClient;
 
     @Transactional(readOnly = true)
     public List<EventReviewDTO> getReviews(Long eventId) {
@@ -46,6 +49,10 @@ public class EventReviewService {
         }
 
         String userId = required(request.getUserId(), "User id is required");
+        if (!bookingAccessClient.hasPaidOrderForEvent(userId, eventId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only attendees can review this event");
+        }
+
         Integer rating = request.getRating();
         if (rating == null || rating < 1 || rating > 5) {
             throw new RuntimeException("Rating must be between 1 and 5");

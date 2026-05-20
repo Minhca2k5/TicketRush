@@ -3,6 +3,7 @@ package com.ticketrush.eventservice.service;
 import com.ticketrush.eventservice.EventServiceApplication;
 import com.ticketrush.eventservice.dto.EventDTO;
 import com.ticketrush.eventservice.dto.EventPriceTierDTO;
+import com.ticketrush.eventservice.dto.EventSummaryDTO;
 import com.ticketrush.eventservice.dto.EventZoneConfigDTO;
 import com.ticketrush.eventservice.dto.DashboardDemographicsDTO;
 import com.ticketrush.eventservice.dto.DashboardOccupancyDTO;
@@ -27,14 +28,17 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest(classes = EventServiceApplication.class)
 @Transactional
@@ -69,6 +73,9 @@ class EventDomainIntegrationTests {
 
     @MockitoBean
     private BookingNotificationClient bookingNotificationClient;
+
+    @MockitoBean
+    private BookingAccessClient bookingAccessClient;
 
     @Test
     void createEventStoresExpandedDomainFieldsAndPriceTiers() {
@@ -535,6 +542,36 @@ class EventDomainIntegrationTests {
         assertThat(eventRepository.findById(endedEvent.getId()).orElseThrow().getStatus()).isEqualTo("PAST");
         assertThat(eventRepository.findById(futureEvent.getId()).orElseThrow().getStatus()).isEqualTo("PENDING");
         verify(bookingNotificationClient).notifyEventEnded(endedEvent.getId(), endedEvent.getName());
+    }
+
+    @Test
+    void pastEventsRequireAdminOrPaidBookingAccess() {
+        Event pastEvent = createEventEntity("Past Access Event", createVenue("Past Access Venue", "9 History Way", 500));
+        pastEvent.setStartTime(LocalDateTime.now().minusDays(2));
+        pastEvent.setEndTime(LocalDateTime.now().minusDays(1));
+        pastEvent.setStatus("PAST");
+        pastEvent = eventRepository.save(pastEvent);
+        Long pastEventId = pastEvent.getId();
+
+        assertThat(eventService.getAllEvents())
+                .extracting(EventSummaryDTO::getId)
+                .doesNotContain(pastEventId);
+        assertThatThrownBy(() -> eventService.getEventById(pastEventId, null, null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Past events are only available to attendees");
+
+        assertThat(eventService.getAllEvents("1", "ADMIN"))
+                .extracting(EventSummaryDTO::getId)
+                .contains(pastEventId);
+
+        when(bookingAccessClient.getPaidEventIds("user-1")).thenReturn(Set.of(pastEventId));
+        when(bookingAccessClient.hasPaidOrderForEvent("user-1", pastEventId)).thenReturn(true);
+
+        assertThat(eventService.getAllEvents("1", "CUSTOMER"))
+                .extracting(EventSummaryDTO::getId)
+                .contains(pastEventId);
+        assertThat(eventService.getEventById(pastEventId, "1", "CUSTOMER").getId())
+                .isEqualTo(pastEventId);
     }
 
     private Venue createVenue(String name, String address, int capacity) {

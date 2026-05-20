@@ -52,6 +52,25 @@ public class BookingController {
         return ResponseEntity.ok(ApiResponse.success("Orders fetched successfully", orders));
     }
 
+    @GetMapping("/internal/users/{userId}/events/{eventId}/paid")
+    public ResponseEntity<ApiResponse<Boolean>> userHasPaidOrderForEvent(
+            @PathVariable String userId,
+            @PathVariable Long eventId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Paid order access checked successfully",
+                bookingService.userHasPaidOrderForEvent(userId, eventId)
+        ));
+    }
+
+    @GetMapping("/internal/users/{userId}/paid-event-ids")
+    public ResponseEntity<ApiResponse<java.util.List<Long>>> getPaidEventIds(@PathVariable String userId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Paid event ids fetched successfully",
+                bookingService.getPaidEventIds(userId)
+        ));
+    }
+
     @GetMapping("/admin/orders")
     public ResponseEntity<ApiResponse<java.util.List<OrderDTO>>> getAllOrders() {
         java.util.List<OrderDTO> orders = bookingService.getAllOrders();
