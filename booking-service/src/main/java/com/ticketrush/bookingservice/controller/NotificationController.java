@@ -1,6 +1,7 @@
 package com.ticketrush.bookingservice.controller;
 
 import com.ticketrush.bookingservice.dto.ApiResponse;
+import com.ticketrush.bookingservice.dto.EventEndedNotificationRequest;
 import com.ticketrush.bookingservice.dto.NotificationDTO;
 import com.ticketrush.bookingservice.dto.SeatReleaseNotificationRequest;
 import com.ticketrush.bookingservice.service.NotificationService;
@@ -24,6 +25,17 @@ import java.util.Map;
 public class NotificationController {
 
     private final NotificationService notificationService;
+
+    @PostMapping("/internal/event-ended")
+    public ResponseEntity<ApiResponse<Void>> createEventEndedNotification(
+            @RequestBody EventEndedNotificationRequest request
+    ) {
+        notificationService.createEventEndedNotificationsForAllAttendees(
+                request.getEventId(),
+                request.getEventName()
+        );
+        return ResponseEntity.ok(ApiResponse.success("Event ended notifications created", null));
+    }
 
     @PostMapping("/internal/seat-released")
     public ResponseEntity<ApiResponse<Void>> createSeatReleasedNotification(

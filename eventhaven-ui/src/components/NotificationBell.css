@@ -176,6 +176,11 @@
   color: #d97706;
 }
 
+.notification-icon.ended {
+  background: #fffbeb;
+  color: #f59e0b;
+}
+
 .notification-content {
   flex: 1;
   min-width: 0;

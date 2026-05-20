@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bell, CalendarDays, Check, RotateCcw, Sparkles, Ticket, Trash2 } from 'lucide-react';
+import { Bell, CalendarDays, Check, RotateCcw, Sparkles, Star, Ticket, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getProfile } from '../services/authService';
 import {
@@ -35,6 +35,8 @@ function getNotificationIcon(type) {
       return <CalendarDays size={16} />;
     case 'SEAT_RELEASED':
       return <RotateCcw size={16} />;
+    case 'EVENT_ENDED':
+      return <Star size={16} />;
     default:
       return <Sparkles size={16} />;
   }
@@ -48,6 +50,8 @@ function getNotificationIconClass(type) {
       return 'event';
     case 'SEAT_RELEASED':
       return 'release';
+    case 'EVENT_ENDED':
+      return 'ended';
     default:
       return 'event';
   }

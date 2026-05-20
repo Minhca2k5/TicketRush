@@ -142,6 +142,41 @@ public class NotificationService {
                 .forEach(this::createUpcomingEventNotifications);
     }
 
+    @Transactional
+    public void createEventEndedNotificationsForAllAttendees(Long eventId, String eventName) {
+        if (eventId == null) {
+            return;
+        }
+
+        String name = eventName != null && !eventName.isBlank() ? eventName : "your event";
+
+        List<Order> paidOrders = orderRepository.findByEventIdAndStatus(eventId, "PAID");
+        if (paidOrders == null || paidOrders.isEmpty()) {
+            return;
+        }
+
+        List<String> distinctUserIds = paidOrders.stream()
+                .map(Order::getUserId)
+                .filter(Objects::nonNull)
+                .filter(userId -> !userId.isBlank())
+                .distinct()
+                .collect(Collectors.toList());
+
+        for (String userId : distinctUserIds) {
+            createNotificationIfAbsent(
+                    userId,
+                    "EVENT_ENDED",
+                    "Share your experience!",
+                    String.format("How was %s? Leave a review and rate your experience now!", name),
+                    "/events/" + eventId,
+                    eventId,
+                    null,
+                    "event-ended:" + userId + ":" + eventId
+            );
+        }
+    }
+
+
     private void createUpcomingEventNotifications(String userId) {
         if (userId == null || userId.isBlank()) {
             return;

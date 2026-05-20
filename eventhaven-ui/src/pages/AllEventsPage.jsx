@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ImageOff, MapPin, Search, SlidersHorizontal, Ticket, X } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ImageOff, MapPin, MessageSquare, Search, SlidersHorizontal, Ticket, X } from 'lucide-react';
 import api from '../services/api';
 import { searchEvents } from '../services/eventService';
 import { getEventPriceInfo } from '../lib/event-pricing';
-import { isEventBookable } from '../lib/event-status';
+import { isEventPast } from '../lib/event-status';
 
 const PAGE_SIZE = 24;
 const DEBOUNCE_MS = 400;
@@ -71,6 +71,7 @@ function EventCard({ event }) {
   const locationText = resolveEventLocation(event);
   const priceInfo = getEventPriceInfo(event);
   const startTime = event.startTime ? new Date(event.startTime).toLocaleString() : 'Date TBA';
+  const isPast = isEventPast(event);
 
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_12px_34px_rgba(15,23,42,0.08)] transition duration-300 hover:-translate-y-1 hover:border-violet-200 hover:shadow-xl">
@@ -90,6 +91,11 @@ function EventCard({ event }) {
         <span className="absolute left-4 top-4 inline-flex max-w-[calc(100%-2rem)] items-center rounded-full bg-violet-600/90 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-white shadow-lg shadow-violet-900/20 ring-1 ring-white/25 backdrop-blur">
           {event.category || 'event'}
         </span>
+        {isPast && (
+          <span className="absolute right-4 top-4 inline-flex items-center rounded-full bg-slate-600/90 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-white shadow-lg shadow-slate-900/20 ring-1 ring-white/25 backdrop-blur">
+            Ended
+          </span>
+        )}
       </div>
 
       <div className="flex flex-1 flex-col p-5">
@@ -117,8 +123,8 @@ function EventCard({ event }) {
           <div className="mb-4 flex items-end justify-between gap-4">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">{priceInfo.helper}</p>
-              <p className={`mt-1 text-2xl font-black tracking-tight ${priceInfo.state === 'sold_out' ? 'text-rose-600' : 'text-slate-950'}`}>
-                {priceInfo.label}
+              <p className={`mt-1 text-2xl font-black tracking-tight ${isPast ? 'text-slate-500' : priceInfo.state === 'sold_out' ? 'text-rose-600' : 'text-slate-950'}`}>
+                {isPast ? 'Ended' : priceInfo.label}
               </p>
             </div>
             {imageFailed ? <ImageOff size={18} className="mb-1 text-slate-300" /> : null}
@@ -126,10 +132,23 @@ function EventCard({ event }) {
 
           <Link
             to={`/events/${event.id}`}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition duration-200 hover:from-violet-500 hover:to-indigo-500 hover:shadow-violet-500/35 focus:outline-none focus:ring-4 focus:ring-violet-200"
+            className={`inline-flex w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-bold text-white shadow-lg transition duration-200 focus:outline-none focus:ring-4 ${
+              isPast
+                ? 'bg-gradient-to-r from-slate-600 to-slate-700 shadow-slate-500/25 hover:from-slate-500 hover:to-slate-600 hover:shadow-slate-500/35 focus:ring-slate-200'
+                : 'bg-gradient-to-r from-violet-600 to-indigo-600 shadow-violet-500/25 hover:from-violet-500 hover:to-indigo-500 hover:shadow-violet-500/35 focus:ring-violet-200'
+            }`}
           >
-            <Ticket size={16} />
-            Buy Ticket
+            {isPast ? (
+              <>
+                <MessageSquare size={16} />
+                View Reviews
+              </>
+            ) : (
+              <>
+                <Ticket size={16} />
+                Buy Ticket
+              </>
+            )}
           </Link>
         </div>
       </div>
@@ -151,6 +170,7 @@ export default function AllEventsPage() {
   const [dateTo, setDateTo] = useState(() => searchParams.get('to') || '');
   const [showFilters, setShowFilters] = useState(false);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+  const [showPastEvents, setShowPastEvents] = useState(false);
   const debounceRef = useRef(null);
 
   const loadEvents = useCallback(async (params = {}) => {
@@ -249,15 +269,19 @@ export default function AllEventsPage() {
   };
 
   const normalizedEvents = useMemo(() => (
-    events.filter((event) => isEventBookable(event)).map((event) => ({
+    events.map((event) => ({
       ...event,
       category: normalizeCategory(event.category || inferCategory(event)),
     }))
   ), [events]);
 
-  const totalPages = Math.max(Math.ceil(normalizedEvents.length / PAGE_SIZE), 1);
+  const displayedEvents = useMemo(() => (
+    normalizedEvents.filter((event) => showPastEvents ? isEventPast(event) : !isEventPast(event))
+  ), [normalizedEvents, showPastEvents]);
+
+  const totalPages = Math.max(Math.ceil(displayedEvents.length / PAGE_SIZE), 1);
   const safePage = Math.min(currentPage, totalPages);
-  const pageEvents = normalizedEvents.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const pageEvents = displayedEvents.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const hasActiveFilters = searchQuery || activeCategory !== 'all' || dateFrom || dateTo || sortBy !== 'date';
 
@@ -373,6 +397,23 @@ export default function AllEventsPage() {
                   )}
                 </div>
 
+                {/* Show Past Events Toggle */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPastEvents((v) => !v);
+                    setCurrentPage(1);
+                  }}
+                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold shadow-sm transition ${
+                    showPastEvents
+                      ? 'border-violet-300 bg-violet-50 text-violet-700 font-bold'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-violet-200'
+                  }`}
+                >
+                  <CalendarDays size={14} className={showPastEvents ? 'text-violet-600' : 'text-slate-400'} />
+                  <span>Past Events</span>
+                </button>
+
                 {/* Advanced Filters Toggle */}
                 <button
                   type="button"
@@ -467,7 +508,7 @@ export default function AllEventsPage() {
               )}
             </div>
 
-            {normalizedEvents.length > PAGE_SIZE && (
+            {displayedEvents.length > PAGE_SIZE && (
               <div className="mt-10 flex flex-col items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm sm:flex-row">
                 <p className="text-sm font-semibold text-slate-500">
                   Page {safePage} of {totalPages}

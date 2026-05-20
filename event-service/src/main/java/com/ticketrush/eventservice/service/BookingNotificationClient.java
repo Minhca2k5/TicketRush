@@ -54,6 +54,27 @@ public class BookingNotificationClient {
         }
     }
 
+    public void notifyEventEnded(Long eventId, String eventName) {
+        if (eventId == null) {
+            return;
+        }
+
+        Map<String, Object> payload = Map.of(
+                "eventId", eventId,
+                "eventName", eventName != null ? eventName : ""
+        );
+
+        try {
+            restTemplate.postForEntity(
+                    bookingServiceUrl + "/api/booking/notifications/internal/event-ended",
+                    payload,
+                    Void.class
+            );
+        } catch (RestClientException ignored) {
+            // Notification delivery failure shouldn't fail event state advancement.
+        }
+    }
+
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
     }

@@ -7,6 +7,9 @@ export function getEventEndDate(event) {
 }
 
 export function isEventPast(event, now = new Date()) {
+  const normalizedStatus = String(event?.status || '').trim().toUpperCase();
+  if (['PAST', 'ENDED', 'COMPLETED'].includes(normalizedStatus)) return true;
+
   const referenceDate = now instanceof Date ? now : new Date();
   const endDate = getEventEndDate(event);
   return endDate ? endDate.getTime() < referenceDate.getTime() : false;
