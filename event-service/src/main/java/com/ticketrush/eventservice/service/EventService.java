@@ -157,6 +157,20 @@ public class EventService {
     }
 
     @Transactional
+    public int closeEndedEvents() {
+        List<Event> endedEvents = eventRepository.findEventsReadyToClose(LocalDateTime.now());
+        if (endedEvents.isEmpty()) {
+            return 0;
+        }
+
+        endedEvents.forEach(event -> event.setStatus("PAST"));
+        List<Event> savedEvents = eventRepository.saveAll(endedEvents);
+
+        savedEvents.forEach(event -> bookingNotificationClient.notifyEventEnded(event.getId(), event.getName()));
+        return savedEvents.size();
+    }
+
+    @Transactional
     public void deleteEvent(Long id) {
         Event event = eventRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Event not found"));

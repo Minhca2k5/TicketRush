@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -33,6 +34,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
 
 @SpringBootTest(classes = EventServiceApplication.class)
 @Transactional
@@ -64,6 +66,9 @@ class EventDomainIntegrationTests {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @MockitoBean
+    private BookingNotificationClient bookingNotificationClient;
 
     @Test
     void createEventStoresExpandedDomainFieldsAndPriceTiers() {
@@ -508,6 +513,28 @@ class EventDomainIntegrationTests {
         assertThat(demographics.getAgeBreakdown())
                 .extracting(item -> item.getLabel() + ":" + item.getCount())
                 .containsExactlyInAnyOrder("18-24:1", "25-34:1", "45+:1", "Unknown:1");
+    }
+
+    @Test
+    void closeEndedEventsMarksPastAndNotifiesBookingService() {
+        Event endedEvent = createEventEntity("Ended Notification Event", createVenue("Ended Venue", "1 Past Way", 500));
+        endedEvent.setStartTime(LocalDateTime.now().minusDays(2));
+        endedEvent.setEndTime(LocalDateTime.now().minusDays(1));
+        endedEvent.setStatus("LIVE");
+        endedEvent = eventRepository.save(endedEvent);
+
+        Event futureEvent = createEventEntity("Future Notification Event", createVenue("Future Venue", "2 Later Way", 500));
+        futureEvent.setStartTime(LocalDateTime.now().plusDays(1));
+        futureEvent.setEndTime(LocalDateTime.now().plusDays(2));
+        futureEvent.setStatus("PENDING");
+        futureEvent = eventRepository.save(futureEvent);
+
+        int closedCount = eventService.closeEndedEvents();
+
+        assertThat(closedCount).isEqualTo(1);
+        assertThat(eventRepository.findById(endedEvent.getId()).orElseThrow().getStatus()).isEqualTo("PAST");
+        assertThat(eventRepository.findById(futureEvent.getId()).orElseThrow().getStatus()).isEqualTo("PENDING");
+        verify(bookingNotificationClient).notifyEventEnded(endedEvent.getId(), endedEvent.getName());
     }
 
     private Venue createVenue(String name, String address, int capacity) {
