@@ -128,12 +128,12 @@
 - **Tại sao nên làm**: Tăng tính professional, rất dễ implement
 - **Ai làm**: Người A (backend) + Người C (FE integration)
 
-#### 4. 🎫 Mã giảm giá / Coupon Code
+#### 4. 🎫 Mã giảm giá / Coupon Code [✅ COMPLETED]
 - Admin tạo coupon (VD: `SUMMER20` giảm 20%)
 - Customer nhập coupon khi checkout → giảm giá
 - Dashboard thống kê mã nào được dùng nhiều
-- **Tại sao nên làm**: Feature rất "real-world", dễ demo, thể hiện hiểu e-commerce
-- **Ai làm**: Người C (booking logic) + Người B (admin UI)
+- **Trạng thái**: Đã hoàn thành hoàn chỉnh cả Backend (Service, Controller, Repository, Entity, API Gateway validation filter) và Frontend (SeatSelector coupon validation, BookingCart checkout apply discount, AdminCouponsPage quản lý coupon)
+- **Ai làm**: Đã hoàn thành 
 
 ---
 
@@ -190,7 +190,7 @@ Nếu chỉ có **1-2 ngày** trước vấn đáp, ưu tiên theo thứ tự:
 |---|-----------|---------------|--------|
 | 1 | **Notification Center** | Đã có UI sẵn, chỉ cần backend + kết nối | ~4-6h |
 | 2 | **Email xác nhận vé** | Đã có EmailService, chỉ cần gọi từ booking | ~4-6h |
-| 3 | **Mã giảm giá** | Rất "real-world", dễ demo, gây ấn tượng | ~6-8h |
+| 3 | **Mã giảm giá** | ✅ **ĐÃ HOÀN THÀNH HOÀN CHỈNH** | - |
 | 4 | **Event Reviews** | Tăng depth cho hệ thống, dễ implement | ~6-8h |
 
 > [!IMPORTANT]
