@@ -31,6 +31,7 @@ public class BookingService {
     private final RestTemplate restTemplate;
     private final BookingEmailService bookingEmailService;
     private final NotificationService notificationService;
+    private final CouponService couponService;
 
     @Value("${app.event-service-url}")
     private String eventServiceUrl;
@@ -113,15 +114,33 @@ public class BookingService {
 
         List<SeatDTO> purchasedSeats = response.getBody().getData();
         
-        BigDecimal totalPrice = purchasedSeats.stream()
+        BigDecimal originalPrice = purchasedSeats.stream()
                 .filter(seat -> seat.getPriceTier() != null && seat.getPriceTier().getPrice() != null)
                 .map(seat -> BigDecimal.valueOf(seat.getPriceTier().getPrice()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal totalPrice = originalPrice;
+        BigDecimal discountAmount = BigDecimal.ZERO;
+        String appliedCouponCode = null;
+
+        if (request.getCouponCode() != null && !request.getCouponCode().trim().isEmpty()) {
+            com.ticketrush.bookingservice.dto.CouponValidationResultDTO validationResult = couponService.applyCoupon(request.getCouponCode(), originalPrice);
+            if (validationResult.isValid()) {
+                discountAmount = validationResult.getDiscountAmount();
+                totalPrice = validationResult.getFinalPrice();
+                appliedCouponCode = request.getCouponCode().trim().toUpperCase();
+            } else {
+                throw new RuntimeException("Áp dụng mã giảm giá thất bại: " + validationResult.getMessage());
+            }
+        }
 
         Order order = new Order();
         order.setUserId(request.getHolderId());
         order.setEventId(request.getEventId());
         order.setTotalPrice(totalPrice);
+        order.setOriginalPrice(originalPrice);
+        order.setDiscountAmount(discountAmount);
+        order.setCouponCode(appliedCouponCode);
         order.setStatus("PAID");
         order = orderRepository.save(order);
 
@@ -147,6 +166,9 @@ public class BookingService {
         orderDTO.setUserId(order.getUserId());
         orderDTO.setEventId(order.getEventId());
         orderDTO.setTotalPrice(order.getTotalPrice());
+        orderDTO.setOriginalPrice(order.getOriginalPrice());
+        orderDTO.setDiscountAmount(order.getDiscountAmount());
+        orderDTO.setCouponCode(order.getCouponCode());
         orderDTO.setStatus(order.getStatus());
         orderDTO.setCreatedAt(order.getCreatedAt());
         orderDTO.setTickets(ticketDTOs);
@@ -180,6 +202,9 @@ public class BookingService {
         dto.setUserId(order.getUserId());
         dto.setEventId(order.getEventId());
         dto.setTotalPrice(order.getTotalPrice());
+        dto.setOriginalPrice(order.getOriginalPrice());
+        dto.setDiscountAmount(order.getDiscountAmount());
+        dto.setCouponCode(order.getCouponCode());
         dto.setStatus(order.getStatus());
         dto.setCreatedAt(order.getCreatedAt());
 

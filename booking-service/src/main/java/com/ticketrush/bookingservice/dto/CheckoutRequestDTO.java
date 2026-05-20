@@ -10,4 +10,5 @@ public class CheckoutRequestDTO {
     private String holderId;
     private String customerEmail;
     private String customerName;
+    private String couponCode;
 }
