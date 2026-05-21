@@ -8,6 +8,7 @@ export default function SeatMapRenderer({
   layout,
   liveSeats = [],
   selectedSeats = [],
+  readOnly = false,
   canvasTheme = 'light',
   fillViewport = false,
   className = '',
@@ -31,6 +32,7 @@ export default function SeatMapRenderer({
       layout={layout}
       liveSeats={liveSeats}
       selectedSeats={selectedSeats}
+      readOnly={readOnly}
       canvasTheme={canvasTheme}
       fillViewport={fillViewport}
       className={className}

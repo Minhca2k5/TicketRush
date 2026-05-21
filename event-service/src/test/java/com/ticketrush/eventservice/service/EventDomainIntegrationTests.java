@@ -360,6 +360,38 @@ class EventDomainIntegrationTests {
     }
 
     @Test
+    void lockAndPurchaseRequireLiveEventStatus() {
+        Venue venue = createVenue("Status Guard Arena", "Miami, FL", 9000);
+        Event event = createEventEntity("Status Guard Event", venue);
+
+        seatService.createSeatsForEvent(new SeatCreationRequest(
+                event.getId(),
+                List.of(new SeatBatchDTO("VIP", "Front", 320.0, 1, 1))
+        ));
+
+        Seat seat = seatRepository.findByEventId(event.getId()).stream()
+                .filter(item -> "A1".equals(item.getSeatNumber()))
+                .findFirst()
+                .orElseThrow();
+
+        event.setStatus("PENDING");
+        eventRepository.save(event);
+
+        assertThatThrownBy(() -> seatService.lockSeat(event.getId(), seat.getId(), "pending-session", 10))
+                .hasMessageContaining("Tickets are only available for live events");
+
+        event.setStatus("LIVE");
+        eventRepository.save(event);
+        seatService.lockSeat(event.getId(), seat.getId(), "live-session", 10);
+
+        event.setStatus("PAST");
+        eventRepository.save(event);
+
+        assertThatThrownBy(() -> seatService.purchaseSeats(event.getId(), List.of(seat.getId()), "live-session"))
+                .hasMessageContaining("Tickets are only available for live events");
+    }
+
+    @Test
     void createEventWithInlineVenueZonesBuildsSeatsAtomically() {
         EventDTO request = new EventDTO(
                 null,
@@ -599,7 +631,7 @@ class EventDomainIntegrationTests {
         event.setLocation(venue.getAddress());
         event.setStartTime(LocalDateTime.of(2026, 9, 1, 19, 0));
         event.setEndTime(LocalDateTime.of(2026, 9, 1, 22, 0));
-        event.setStatus("DRAFT");
+        event.setStatus("LIVE");
         event.setVenue(venue);
         return eventRepository.save(event);
     }

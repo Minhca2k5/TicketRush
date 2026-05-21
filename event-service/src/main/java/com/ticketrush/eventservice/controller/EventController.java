@@ -63,9 +63,10 @@ public class EventController {
     @GetMapping
     public ResponseEntity<ApiResponse<List<EventSummaryDTO>>> getAllEvents(
             @RequestHeader(value = "X-User-Id", required = false) String viewerUserId,
-            @RequestHeader(value = "X-User-Role", required = false) String viewerRole
+            @RequestHeader(value = "X-User-Role", required = false) String viewerRole,
+            @RequestParam(required = false, defaultValue = "false") boolean includeDraft
     ) {
-        return ResponseEntity.ok(ApiResponse.success("Events fetched successfully", eventService.getAllEvents(viewerUserId, viewerRole)));
+        return ResponseEntity.ok(ApiResponse.success("Events fetched successfully", eventService.getAllEvents(viewerUserId, viewerRole, includeDraft)));
     }
 
     @GetMapping("/search")
@@ -76,9 +77,10 @@ public class EventController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
             @RequestParam(required = false, defaultValue = "date") String sort,
             @RequestHeader(value = "X-User-Id", required = false) String viewerUserId,
-            @RequestHeader(value = "X-User-Role", required = false) String viewerRole
+            @RequestHeader(value = "X-User-Role", required = false) String viewerRole,
+            @RequestParam(required = false, defaultValue = "false") boolean includeDraft
     ) {
-        List<EventSummaryDTO> results = eventService.searchEvents(q, category, from, to, viewerUserId, viewerRole);
+        List<EventSummaryDTO> results = eventService.searchEvents(q, category, from, to, viewerUserId, viewerRole, includeDraft);
 
         switch (sort) {
             case "name" -> results.sort(Comparator.comparing(e -> e.getName() != null ? e.getName().toLowerCase() : ""));
@@ -99,9 +101,10 @@ public class EventController {
     public ResponseEntity<ApiResponse<EventDTO>> getEventById(
             @PathVariable Long id,
             @RequestHeader(value = "X-User-Id", required = false) String viewerUserId,
-            @RequestHeader(value = "X-User-Role", required = false) String viewerRole
+            @RequestHeader(value = "X-User-Role", required = false) String viewerRole,
+            @RequestParam(required = false, defaultValue = "false") boolean includeDraft
     ) {
-        return ResponseEntity.ok(ApiResponse.success("Event fetched successfully", eventService.getEventById(id, viewerUserId, viewerRole)));
+        return ResponseEntity.ok(ApiResponse.success("Event fetched successfully", eventService.getEventById(id, viewerUserId, viewerRole, includeDraft)));
     }
 
     @PostMapping

@@ -4,7 +4,7 @@ import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ImageOff, MapPin,
 import api from '../services/api';
 import { searchEvents } from '../services/eventService';
 import { getEventPriceInfo } from '../lib/event-pricing';
-import { isEventPast } from '../lib/event-status';
+import { getAdminEventStatus, isCustomerVisibleEvent, isEventBookable, isEventPast } from '../lib/event-status';
 
 const PAGE_SIZE = 24;
 const DEBOUNCE_MS = 400;
@@ -72,6 +72,8 @@ function EventCard({ event }) {
   const priceInfo = getEventPriceInfo(event);
   const startTime = event.startTime ? new Date(event.startTime).toLocaleString() : 'Date TBA';
   const isPast = isEventPast(event);
+  const canBook = isEventBookable(event);
+  const eventStatus = getAdminEventStatus(event);
 
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_12px_34px_rgba(15,23,42,0.08)] transition duration-300 hover:-translate-y-1 hover:border-violet-200 hover:shadow-xl">
@@ -94,6 +96,11 @@ function EventCard({ event }) {
         {isPast && (
           <span className="absolute right-4 top-4 inline-flex items-center rounded-full bg-slate-600/90 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-white shadow-lg shadow-slate-900/20 ring-1 ring-white/25 backdrop-blur">
             Ended
+          </span>
+        )}
+        {!isPast && !canBook && (
+          <span className="absolute right-4 top-4 inline-flex items-center rounded-full bg-amber-500/90 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-white shadow-lg shadow-amber-900/20 ring-1 ring-white/25 backdrop-blur">
+            {eventStatus}
           </span>
         )}
       </div>
@@ -123,8 +130,8 @@ function EventCard({ event }) {
           <div className="mb-4 flex items-end justify-between gap-4">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">{priceInfo.helper}</p>
-              <p className={`mt-1 text-2xl font-black tracking-tight ${isPast ? 'text-slate-500' : priceInfo.state === 'sold_out' ? 'text-rose-600' : 'text-slate-950'}`}>
-                {isPast ? 'Ended' : priceInfo.label}
+              <p className={`mt-1 text-2xl font-black tracking-tight ${!canBook ? 'text-slate-500' : priceInfo.state === 'sold_out' ? 'text-rose-600' : 'text-slate-950'}`}>
+                {isPast ? 'Ended' : canBook ? priceInfo.label : 'Coming Soon'}
               </p>
             </div>
             {imageFailed ? <ImageOff size={18} className="mb-1 text-slate-300" /> : null}
@@ -133,7 +140,7 @@ function EventCard({ event }) {
           <Link
             to={`/events/${event.id}`}
             className={`inline-flex w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-bold text-white shadow-lg transition duration-200 focus:outline-none focus:ring-4 ${
-              isPast
+              !canBook
                 ? 'bg-gradient-to-r from-slate-600 to-slate-700 shadow-slate-500/25 hover:from-slate-500 hover:to-slate-600 hover:shadow-slate-500/35 focus:ring-slate-200'
                 : 'bg-gradient-to-r from-violet-600 to-indigo-600 shadow-violet-500/25 hover:from-violet-500 hover:to-indigo-500 hover:shadow-violet-500/35 focus:ring-violet-200'
             }`}
@@ -142,6 +149,11 @@ function EventCard({ event }) {
               <>
                 <MessageSquare size={16} />
                 View Reviews
+              </>
+            ) : !canBook ? (
+              <>
+                <Ticket size={16} />
+                View Details
               </>
             ) : (
               <>
@@ -276,7 +288,9 @@ export default function AllEventsPage() {
   ), [events]);
 
   const displayedEvents = useMemo(() => (
-    normalizedEvents.filter((event) => showPastEvents ? isEventPast(event) : !isEventPast(event))
+    normalizedEvents
+      .filter((event) => isCustomerVisibleEvent(event))
+      .filter((event) => showPastEvents ? isEventPast(event) : !isEventPast(event))
   ), [normalizedEvents, showPastEvents]);
 
   const totalPages = Math.max(Math.ceil(displayedEvents.length / PAGE_SIZE), 1);

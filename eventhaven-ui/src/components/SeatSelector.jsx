@@ -22,6 +22,7 @@ const REALTIME_RECONNECT_MS = 2500;
 const REALTIME_REFRESH_DEBOUNCE_MS = 150;
 const HOLDER_STORAGE_KEY = "ticketrush-seat-holder";
 const SELECTION_STORAGE_PREFIX = "ticketrush-seat-selection";
+const PENDING_PREVIEW_TOAST_MESSAGE = "Sự kiện đang ở trạng thái chờ mở bán. Bạn hiện chỉ có thể xem trước sơ đồ ghế!";
 const CONFLICT_TOAST_MESSAGE = "Ghế này vừa có người đặt, vui lòng chọn ghế khác";
 
 function getOrCreateHolderId() {
@@ -117,7 +118,7 @@ function getRestoredTimerStart(selectedSeats, storedExpirationTime) {
   return expirationTime ? expirationTime - HOLD_MINUTES * 60 * 1000 : null;
 }
 
-export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, initialLayout, initialCoordinateLayout }) {
+export function SeatSelector({ eventId, event, isPending = false, initialSeats, initialRawSeats, initialLayout, initialCoordinateLayout }) {
   const navigate = useNavigate();
   const [selectedSeats, setSelectedSeats] = useState([]);
   const [timerStart, setTimerStart] = useState(null);
@@ -151,6 +152,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
     () => selectedSeats.reduce((sum, seat) => sum + Number(seat.price || 0), 0),
     [selectedSeats]
   );
+  const previewNotice = "Vé chưa mở bán chính thức. Vui lòng quay lại sau.";
 
   const handleApplyCoupon = async (code) => {
     if (!code || !code.trim()) {
@@ -163,7 +165,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
       const response = await validateCoupon(code, total);
       if (response.success && response.data?.valid) {
         setAppliedCoupon(response.data);
-        setToast({ type: "info", message: "Áp dụng mã giảm giá thành công!" });
+        setToast({ type: "info", title: "Coupon applied", message: "Áp dụng mã giảm giá thành công!" });
       } else {
         setCouponError(response.message || response.data?.message || "Mã giảm giá không hợp lệ");
         setAppliedCoupon(null);
@@ -251,6 +253,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
         setReminderShownFor(key);
         setToast({
           type: "warning",
+          title: "Seat hold reminder",
           message: `Your held seats expire in about ${userSettings.holdReminderMinutes} minute(s).`,
         });
       }
@@ -297,6 +300,16 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
     const timer = window.setTimeout(() => setToast(null), 3200);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    if (!isPending) {
+      return;
+    }
+
+    setSelectedSeats([]);
+    setTimerStart(null);
+    setShowBookingConfirm(false);
+  }, [isPending]);
 
   const syncSeatStatus = useCallback(async ({ silentError = false } = {}) => {
     setIsSyncing(true);
@@ -439,7 +452,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
       const nextSelection = previous.filter((seat) => retainableSeatIds.has(seat.id));
       if (nextSelection.length !== previous.length) {
         setSyncMessage("One or more selected seats are no longer available and were removed.");
-        setToast({ type: "warning", message: CONFLICT_TOAST_MESSAGE });
+        setToast({ type: "warning", title: "Seat conflict", message: CONFLICT_TOAST_MESSAGE });
       }
       if (!nextSelection.length) {
         setTimerStart(null);
@@ -522,6 +535,15 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
   }, []);
 
   const handleSeatSelect = useCallback(async (seat) => {
+    if (isPending) {
+      setToast({
+        type: "info",
+        title: "Preview mode",
+        message: PENDING_PREVIEW_TOAST_MESSAGE,
+      });
+      return;
+    }
+
     if (!eventId || !holderIdRef.current) {
       return;
     }
@@ -591,7 +613,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
       setSyncMessage("");
     } catch {
       setSyncMessage(CONFLICT_TOAST_MESSAGE);
-      setToast({ type: "warning", message: CONFLICT_TOAST_MESSAGE });
+      setToast({ type: "warning", title: "Seat conflict", message: CONFLICT_TOAST_MESSAGE });
       try {
         await syncSeatStatus({ silentError: true });
       } catch {
@@ -600,7 +622,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
     } finally {
       mutateSeatInFlight(seat.id, false);
     }
-  }, [eventId, mergeSeatDetails, mutateSeatInFlight, syncSeatStatus]);
+  }, [eventId, isPending, mergeSeatDetails, mutateSeatInFlight, syncSeatStatus]);
 
   const handleRemoveSeat = useCallback(async (seat) => {
     await handleSeatSelect(seat);
@@ -660,6 +682,14 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
   }, [eventId, syncSeatStatus]);
 
   const handleCheckout = useCallback(async () => {
+    if (isPending) {
+      setToast({
+        type: "info",
+        title: "Preview mode",
+        message: PENDING_PREVIEW_TOAST_MESSAGE,
+      });
+      return;
+    }
     if (!eventId || !holderIdRef.current || !selectedSeats.length) return;
     setIsCheckoutLoading(true);
     try {
@@ -680,11 +710,24 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
     } catch (err) {
       const errMsg = err.response?.data?.message || err.message || "Checkout failed. Your session may have expired.";
       setSyncMessage(errMsg);
-      setToast({ type: "warning", message: errMsg });
+      setToast({ type: "warning", title: "Checkout failed", message: errMsg });
     } finally {
       setIsCheckoutLoading(false);
     }
-  }, [customerProfile, eventId, selectedSeats, syncSeatStatus, appliedCoupon, couponCode]);
+  }, [customerProfile, eventId, selectedSeats, syncSeatStatus, appliedCoupon, couponCode, isPending]);
+
+  const handleOpenCheckout = useCallback(() => {
+    if (isPending) {
+      setToast({
+        type: "info",
+        title: "Preview mode",
+        message: PENDING_PREVIEW_TOAST_MESSAGE,
+      });
+      return;
+    }
+
+    setShowBookingConfirm(true);
+  }, [isPending]);
 
   const selectionExpiresAt = useMemo(() => {
     const expirationTime = getSelectionExpirationTime(selectedSeats);
@@ -751,6 +794,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
                     layout={coordinateLayout}
                     liveSeats={rawLiveSeats}
                     selectedSeats={selectedSeats.map((seat) => ({ seat }))}
+                    readOnly={isPending}
                     canvasTheme="light"
                     fillViewport
                     onToggleSeat={handleCanvasSeatSelect}
@@ -762,6 +806,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
                 seats={seats}
                 seatLayout={seatLayout}
                 selectedSeats={selectedSeats}
+                readOnly={isPending}
                 onSeatSelect={handleSeatSelect}
               />
             )}
@@ -776,9 +821,10 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
           <aside className="hidden xl:col-span-3 xl:block">
             <div className="sticky top-24">
               <BookingCart
+                isPending={isPending}
                 selectedSeats={selectedSeats}
                 onRemoveSeat={handleRemoveSeat}
-                onBookNow={() => setShowBookingConfirm(true)}
+                onBookNow={handleOpenCheckout}
                 onTimerExpired={handleReleaseTicket}
                 timerStart={timerStart}
                 expiresAt={selectionExpiresAt}
@@ -803,7 +849,11 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
           className="flex w-full items-center justify-center gap-3 rounded-full bg-violet-600 px-5 py-4 text-sm font-bold text-white shadow-2xl shadow-violet-600/25"
         >
           <ShoppingBag size={18} />
-          {selectedSeats.length ? `Review Selection (${selectedSeats.length})` : 'Booking Summary'}
+          {selectedSeats.length
+            ? `Review Selection (${selectedSeats.length})`
+            : isPending
+              ? 'Preview Summary'
+              : 'Booking Summary'}
         </button>
       </div>
 
@@ -822,11 +872,12 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
               </button>
             </div>
             <BookingCart
+              isPending={isPending}
               selectedSeats={selectedSeats}
               onRemoveSeat={handleRemoveSeat}
               onBookNow={() => {
                 setShowMobileCart(false);
-                setShowBookingConfirm(true);
+                handleOpenCheckout();
               }}
               onTimerExpired={handleReleaseTicket}
               timerStart={timerStart}
@@ -897,16 +948,19 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
                 )}
                 <button
                   type="button"
-                  disabled={isCheckoutLoading}
+                  disabled={isCheckoutLoading || isPending}
                   onClick={handleCheckout}
-                  className="mt-6 w-full flex justify-center items-center rounded-full bg-violet-600 px-6 py-4 text-sm font-bold text-white transition hover:bg-violet-500 disabled:opacity-50"
+                  className="mt-6 flex w-full items-center justify-center rounded-full bg-violet-600 px-6 py-4 text-sm font-bold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
                 >
                   {isCheckoutLoading ? (
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                   ) : (
-                    "Pay Now"
+                    isPending ? "Chưa mở bán" : "Pay Now"
                   )}
                 </button>
+                {isPending ? (
+                  <p className="mt-3 text-sm text-slate-500">{previewNotice}</p>
+                ) : null}
                 <button
                   type="button"
                   disabled={isCheckoutLoading}
@@ -947,13 +1001,17 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
       )}
 
       {toast && (
-        <div className="fixed right-4 top-24 z-[70] max-w-sm rounded-2xl border border-amber-200 bg-white px-4 py-3 shadow-xl">
+        <div className={`fixed right-4 top-24 z-[70] max-w-sm rounded-2xl border bg-white px-4 py-3 shadow-xl ${
+          toast.type === "info" ? "border-sky-200" : "border-amber-200"
+        }`}>
           <div className="flex items-start gap-3">
-            <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+            <span className={`mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full ${
+              toast.type === "info" ? "bg-sky-100 text-sky-700" : "bg-amber-100 text-amber-700"
+            }`}>
               <AlertTriangle size={16} />
             </span>
             <div>
-              <p className="text-sm font-semibold text-slate-900">Seat conflict</p>
+              <p className="text-sm font-semibold text-slate-900">{toast.title || "Seat conflict"}</p>
               <p className="mt-1 text-sm text-slate-600">{toast.message}</p>
             </div>
           </div>

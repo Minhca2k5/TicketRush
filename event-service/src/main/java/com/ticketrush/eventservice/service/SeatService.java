@@ -140,6 +140,7 @@ public class SeatService {
 
     @Transactional
     public SeatDTO lockSeat(Long eventId, Long seatId, String holderId, Integer holdMinutes) {
+        ensureEventBookable(eventId);
         Seat seat = getSeatForEventForUpdate(eventId, seatId);
         expireLockIfNeeded(seat);
 
@@ -183,6 +184,7 @@ public class SeatService {
 
     @Transactional
     public List<SeatDTO> purchaseSeats(Long eventId, List<Long> seatIds, String holderId) {
+        ensureEventBookable(eventId);
         String normalizedHolderId = required(holderId, "Holder id is required");
         if (seatIds == null || seatIds.isEmpty()) {
             throw new RuntimeException("At least one seat id is required");
@@ -259,6 +261,14 @@ public class SeatService {
     }
 
 
+
+    private void ensureEventBookable(Long eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new RuntimeException("Event not found"));
+        if (!EventStatusPolicy.isBookable(event)) {
+            throw new RuntimeException("Tickets are only available for live events");
+        }
+    }
 
     private Seat getSeatForEventForUpdate(Long eventId, Long seatId) {
         try {

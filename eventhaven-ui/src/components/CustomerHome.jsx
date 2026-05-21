@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { isEventBookable } from '../lib/event-status';
+import { isCustomerVisibleEvent } from '../lib/event-status';
 import './CustomerHome.css';
 
 /* ── SVG icons ── */
@@ -344,14 +344,16 @@ export default function CustomerHome() {
   const handleView = (id) => navigate(`/events/${id}`);
   const scrollToEvents = () => document.getElementById('ch-events-section')?.scrollIntoView({ behavior: 'smooth' });
 
-  const filtered = events.filter(ev => {
+  const customerVisibleEvents = events.filter((ev) => isCustomerVisibleEvent(ev));
+
+  const filtered = customerVisibleEvents.filter(ev => {
     const matchCat = activeCategory === 'all' || guessCategory(ev) === activeCategory;
     const matchSearch = !searchQuery || ev.name?.toLowerCase().includes(searchQuery.toLowerCase()) || ev.location?.toLowerCase().includes(searchQuery.toLowerCase());
     return matchCat && matchSearch;
   });
 
   const visible = filtered.slice(0, visibleCount);
-  const featured = events[0] || null;
+  const featured = customerVisibleEvents[0] || null;
 
   return (
     <div className="ch-root">

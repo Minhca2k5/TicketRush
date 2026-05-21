@@ -79,34 +79,59 @@ public class EventService {
 
     @Transactional(readOnly = true)
     public EventDTO getEventById(Long id) {
-        return getEventById(id, null, null);
+        return getEventById(id, null, null, false);
     }
 
     @Transactional(readOnly = true)
     public EventDTO getEventById(Long id, String viewerUserId, String viewerRole) {
+        return getEventById(id, viewerUserId, viewerRole, false);
+    }
+
+    @Transactional(readOnly = true)
+    public EventDTO getEventById(Long id, boolean includeDraft) {
+        return getEventById(id, null, null, includeDraft);
+    }
+
+    @Transactional(readOnly = true)
+    public EventDTO getEventById(Long id, String viewerUserId, String viewerRole, boolean includeDraft) {
         Event event = eventRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Event not found"));
-        ensurePastEventAccess(event, viewerUserId, viewerRole);
+        if (!includeDraft && !EventStatusPolicy.isCustomerVisible(event)) {
+            throw new RuntimeException("Event not found");
+        }
+        if (!includeDraft) {
+            ensurePastEventAccess(event, viewerUserId, viewerRole);
+        }
         return mapToDTO(event);
     }
 
     @Transactional(readOnly = true)
     public List<EventSummaryDTO> getAllEvents() {
-        return getAllEvents(null, null);
+        return getAllEvents(null, null, false);
     }
 
     @Transactional(readOnly = true)
     public List<EventSummaryDTO> getAllEvents(String viewerUserId, String viewerRole) {
-        Set<Long> paidEventIds = resolvePaidEventIds(viewerUserId, viewerRole);
+        return getAllEvents(viewerUserId, viewerRole, false);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EventSummaryDTO> getAllEvents(boolean includeDraft) {
+        return getAllEvents(null, null, includeDraft);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EventSummaryDTO> getAllEvents(String viewerUserId, String viewerRole, boolean includeDraft) {
+        Set<Long> paidEventIds = includeDraft ? Set.of() : resolvePaidEventIds(viewerUserId, viewerRole);
         return eventRepository.findAll().stream()
-                .filter(event -> canListEvent(event, viewerUserId, viewerRole, paidEventIds))
+                .filter(event -> includeDraft || (EventStatusPolicy.isCustomerVisible(event) && canListEvent(event, viewerUserId, viewerRole, paidEventIds)))
                 .map(this::mapToSummaryDTO)
                 .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public List<EventSummaryDTO> searchEvents(String keyword, String category, LocalDateTime fromDate, LocalDateTime toDate) {
-        return searchEvents(keyword, category, fromDate, toDate, null, null);
+        return searchEvents(keyword, category, fromDate, toDate, null, null, false);
     }
 
     @Transactional(readOnly = true)
@@ -118,12 +143,30 @@ public class EventService {
             String viewerUserId,
             String viewerRole
     ) {
+        return searchEvents(keyword, category, fromDate, toDate, viewerUserId, viewerRole, false);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EventSummaryDTO> searchEvents(String keyword, String category, LocalDateTime fromDate, LocalDateTime toDate, boolean includeDraft) {
+        return searchEvents(keyword, category, fromDate, toDate, null, null, includeDraft);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EventSummaryDTO> searchEvents(
+            String keyword,
+            String category,
+            LocalDateTime fromDate,
+            LocalDateTime toDate,
+            String viewerUserId,
+            String viewerRole,
+            boolean includeDraft
+    ) {
         String normalizedKeyword = (keyword == null || keyword.trim().isEmpty()) ? null : keyword.trim();
         String normalizedCategory = normalizeCategoryKey(category);
-        Set<Long> paidEventIds = resolvePaidEventIds(viewerUserId, viewerRole);
+        Set<Long> paidEventIds = includeDraft ? Set.of() : resolvePaidEventIds(viewerUserId, viewerRole);
 
         return eventRepository.findAll(Sort.by(Sort.Direction.ASC, "startTime")).stream()
-                .filter(event -> canListEvent(event, viewerUserId, viewerRole, paidEventIds))
+                .filter(event -> includeDraft || (EventStatusPolicy.isCustomerVisible(event) && canListEvent(event, viewerUserId, viewerRole, paidEventIds)))
                 .filter(event -> matchesKeyword(event, normalizedKeyword))
                 .filter(event -> matchesCategory(event, normalizedCategory))
                 .filter(event -> matchesDateRange(event, fromDate, toDate))
@@ -670,7 +713,7 @@ public class EventService {
         dto.setEndTime(event.getEndTime());
         dto.setImageUrl(event.getImageUrl());
         dto.setBannerUrl(event.getBannerUrl());
-        dto.setStatus(event.getStatus());
+        dto.setStatus(EventStatusPolicy.resolveDisplayStatus(event));
         dto.setVenue(mapVenueToDTO(event.getVenue()));
         dto.setMinPrice(resolveSummaryMinPrice(event, eventPriceTiers, seats));
         dto.setSoldOut(isEventSoldOut(seats));
@@ -777,7 +820,7 @@ public class EventService {
         dto.setEndTime(event.getEndTime());
         dto.setImageUrl(event.getImageUrl());
         dto.setBannerUrl(event.getBannerUrl());
-        dto.setStatus(event.getStatus());
+        dto.setStatus(EventStatusPolicy.resolveDisplayStatus(event));
         dto.setVenue(mapVenueToDTO(event.getVenue()));
         dto.setZones(mapZonesToDTO(seats, eventPriceTiers));
         dto.setPriceTiers(priceTierDTOs);
@@ -1184,21 +1227,7 @@ public class EventService {
     }
 
     private String resolveStatus(EventDTO dto) {
-        String explicitStatus = trimToNull(dto.getStatus());
-        if (explicitStatus != null) {
-            return explicitStatus.toUpperCase();
-        }
-        if (dto.getStartTime() == null) {
-            return "DRAFT";
-        }
-        LocalDateTime now = LocalDateTime.now();
-        if (dto.getEndTime() != null && dto.getEndTime().isBefore(now)) {
-            return "PAST";
-        }
-        if (!dto.getStartTime().isAfter(now)) {
-            return "LIVE";
-        }
-        return "PENDING";
+        return EventStatusPolicy.resolveSubmittedStatus(dto.getStatus(), dto.getStartTime(), dto.getEndTime());
     }
 
     private int ensureRange(Integer value, int min, int max, String message) {

@@ -1,8 +1,10 @@
 import { memo } from "react";
 import { cn } from "@/lib/utils";
 
-function SeatItemComponent({ seat, isSelected, onToggle }) {
-  const disabled = seat.pending || (seat.status !== "AVAILABLE" && !isSelected);
+function SeatItemComponent({ seat, isSelected, readOnly = false, onToggle }) {
+  const isUnavailable = seat.status !== "AVAILABLE" && !isSelected;
+  const readOnlyAvailable = readOnly && !seat.pending && !isUnavailable;
+  const disabled = seat.pending || (isUnavailable && !readOnly);
 
   const seatClass = cn(
     "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border text-[11px] font-bold transition-all duration-150 md:h-11 md:w-11",
@@ -10,7 +12,8 @@ function SeatItemComponent({ seat, isSelected, onToggle }) {
     seat.pending && "cursor-wait opacity-60",
     seat.status === "SOLD" && "cursor-not-allowed border-slate-300 bg-slate-200 text-slate-400",
     seat.status === "LOCKED" && "cursor-not-allowed border-amber-300 bg-amber-100 text-amber-700",
-    seat.status === "AVAILABLE" && !isSelected && "border-violet-200 bg-white text-violet-700 hover:-translate-y-0.5 hover:border-violet-400 hover:shadow-md",
+    readOnlyAvailable && "cursor-not-allowed border-violet-200 bg-white text-violet-700 hover:translate-y-0 hover:border-violet-200 hover:shadow-none",
+    seat.status === "AVAILABLE" && !isSelected && !readOnlyAvailable && "border-violet-200 bg-white text-violet-700 hover:-translate-y-0.5 hover:border-violet-400 hover:shadow-md",
     isSelected && "border-violet-600 bg-violet-600 text-white shadow-lg shadow-violet-600/20"
   );
 
@@ -32,6 +35,7 @@ function SeatItemComponent({ seat, isSelected, onToggle }) {
 export const SeatItem = memo(
   SeatItemComponent,
   (prev, next) =>
+    prev.readOnly === next.readOnly &&
     prev.isSelected === next.isSelected &&
     prev.seat.id === next.seat.id &&
     prev.seat.status === next.seat.status &&

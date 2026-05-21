@@ -56,7 +56,7 @@ export default function AdminEventDetail() {
     const load = async () => {
       try {
         const [eventResponse, reviewsResponse] = await Promise.all([
-          api.get(`/events/${id}`),
+          api.get(`/events/${id}?includeDraft=true`),
           api.get(`/events/${id}/reviews`).catch(() => ({ data: { data: [] } })),
         ]);
         const payload = eventResponse.data?.data || eventResponse.data;

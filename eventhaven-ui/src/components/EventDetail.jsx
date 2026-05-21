@@ -6,7 +6,7 @@ import { WaitingRoom } from './WaitingRoom';
 import { mapSeatLayoutToType, mapSeatsToType } from '@/lib/seat-types';
 import { getEventById, getEventReviews, getSeatLayout, getSeatMap, submitEventReview } from '../services/eventService';
 import { getProfile } from '../services/authService';
-import { isEventPast } from '../lib/event-status';
+import { isEventPast, isEventPending } from '../lib/event-status';
 
 function getAccountHolderId(profile) {
   if (profile?.id) return `user-${profile.id}`;
@@ -188,11 +188,14 @@ export default function EventDetail() {
     const load = async (isInitialLoad = false) => {
       try {
         const eventPayload = await getEventById(id);
+        const shouldLoadSeatExperience = !isEventPast(eventPayload);
 
-        const [seatMapPayload, layoutPayload] = await Promise.all([
-          getSeatMap(id).catch(() => []),
-          getSeatLayout(id).catch(() => null),
-        ]);
+        const [seatMapPayload, layoutPayload] = shouldLoadSeatExperience
+          ? await Promise.all([
+              getSeatMap(id).catch(() => []),
+              getSeatLayout(id).catch(() => null),
+            ])
+          : [[], null];
 
         if (!ignore) {
           const mappedLayout = mapSeatLayoutToType(layoutPayload);
@@ -259,13 +262,16 @@ export default function EventDetail() {
     );
   }
 
-  if (!isAdmitted) {
+  const pendingPreview = isEventPending(event);
+
+  if (!pendingPreview && !isAdmitted) {
     return <WaitingRoom eventId={event.id || Number(id)} onAdmit={handleAdmit} />;
   }
 
   return (
     <SeatSelector
       eventId={event.id || Number(id)}
+      isPending={pendingPreview}
       event={{
         name: event.name,
         location: event.location || event.venue?.name || event.venue?.address,
@@ -273,6 +279,7 @@ export default function EventDetail() {
         imageUrl: event.bannerUrl || event.imageUrl,
         averageRating: event.averageRating,
         reviewCount: event.reviewCount,
+        status: event.status,
       }}
       initialLayout={seatLayout}
       initialSeats={seatInventory}

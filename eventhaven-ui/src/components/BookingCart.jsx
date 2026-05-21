@@ -16,6 +16,7 @@ function getZoneLabel(seat) {
 }
 
 export function BookingCart({
+  isPending = false,
   selectedSeats,
   onRemoveSeat,
   onBookNow,
@@ -87,13 +88,16 @@ export function BookingCart({
   }, [remaining]);
 
   const subtotalLabel = useMemo(() => currencyFormatter.format(total || 0), [total]);
+  const checkoutDisabled = isPending || !selectedSeats.length;
 
   return (
     <div className="rounded-[28px] border border-white/70 bg-white/90 p-5 shadow-[0_24px_50px_rgba(148,163,184,0.14)]">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-xl font-black tracking-tight text-slate-950">Booking Summary</h3>
-          <p className="mt-1 text-sm text-slate-500">Review selected seats before checkout.</p>
+          <p className="mt-1 text-sm text-slate-500">
+            {isPending ? "Vé chưa mở bán chính thức. Vui lòng quay lại sau." : "Review selected seats before checkout."}
+          </p>
         </div>
         <div className="rounded-2xl bg-amber-50 px-4 py-3 text-right">
           <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-amber-600">
@@ -107,7 +111,7 @@ export function BookingCart({
       <div className="mt-6 rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
         {selectedSeats.length === 0 ? (
           <div className="py-8 text-center text-sm text-slate-500">
-            Pick one or more seats to unlock checkout.
+            {isPending ? "Đây là chế độ xem trước. Việc chọn ghế sẽ mở khi sự kiện chuyển sang Live." : "Pick one or more seats to unlock checkout."}
           </div>
         ) : (
           <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
@@ -212,11 +216,11 @@ export function BookingCart({
 
       <button
         type="button"
-        disabled={!selectedSeats.length}
+        disabled={checkoutDisabled}
         onClick={onBookNow}
         className="mt-5 w-full rounded-full bg-violet-600 px-5 py-4 text-sm font-bold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:bg-slate-300"
       >
-        Proceed to Checkout
+        {isPending ? "Chưa mở bán" : "Proceed to Checkout"}
       </button>
     </div>
   );
