@@ -122,7 +122,6 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
   const [selectedSeats, setSelectedSeats] = useState([]);
   const [timerStart, setTimerStart] = useState(null);
   const [showMobileCart, setShowMobileCart] = useState(false);
-  const [showBookingConfirm, setShowBookingConfirm] = useState(false);
   const [seatLayout, setSeatLayout] = useState(initialLayout || null);
   const [coordinateLayout, setCoordinateLayout] = useState(initialCoordinateLayout || null);
   const [rawLiveSeats, setRawLiveSeats] = useState(initialRawSeats || []);
@@ -135,13 +134,10 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
   const [seatActionInFlight, setSeatActionInFlight] = useState([]);
   const [toast, setToast] = useState(null);
   const [isProfileLoaded, setIsProfileLoaded] = useState(false);
-  const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
-  const [checkoutSuccess, setCheckoutSuccess] = useState(false);
   const [showHoldExpiredModal, setShowHoldExpiredModal] = useState(false);
   const [userSettings, setUserSettings] = useState(null);
   const [customerProfile, setCustomerProfile] = useState(null);
   const [reminderShownFor, setReminderShownFor] = useState(null);
-  const [orderId, setOrderId] = useState(null);
   const [changedSeatIds, setChangedSeatIds] = useState([]);
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState(null);
@@ -277,8 +273,9 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
       selectedSeatIds: selectedSeats.map((seat) => seat.id),
       expirationTime: getSelectionExpirationTime(selectedSeats),
       selectedSeats,
+      couponCode: appliedCoupon ? couponCode : "",
     });
-  }, [eventId, selectedSeats]);
+  }, [eventId, selectedSeats, appliedCoupon, couponCode]);
 
   useEffect(() => {
     setLiveSeats(initialSeats || []);
@@ -642,7 +639,6 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
 
       setSelectedSeats([]);
       setTimerStart(null);
-      setShowBookingConfirm(false);
       setShowMobileCart(false);
       setLiveSeats((previous) =>
         previous.map((seat) =>
@@ -666,32 +662,7 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
     }
   }, [eventId, syncSeatStatus]);
 
-  const handleCheckout = useCallback(async () => {
-    if (!eventId || !holderIdRef.current || !selectedSeats.length) return;
-    setIsCheckoutLoading(true);
-    try {
-      const seatIds = selectedSeats.map(s => s.id);
-      const codeToApply = appliedCoupon ? couponCode : '';
-      const order = await checkout(eventId, seatIds, holderIdRef.current, {
-        email: customerProfile?.email,
-        name: customerProfile?.username,
-      }, codeToApply);
-      setOrderId(order.id);
-      setCheckoutSuccess(true);
-      setSelectedSeats([]);
-      setTimerStart(null);
-      setAppliedCoupon(null);
-      setCouponCode("");
-      // Trigger a sync so the map turns the seats to SOLD
-      await syncSeatStatus({ silentError: true });
-    } catch (err) {
-      const errMsg = err.response?.data?.message || err.message || "Checkout failed. Your session may have expired.";
-      setSyncMessage(errMsg);
-      setToast({ type: "warning", message: errMsg });
-    } finally {
-      setIsCheckoutLoading(false);
-    }
-  }, [customerProfile, eventId, selectedSeats, syncSeatStatus, appliedCoupon, couponCode]);
+
 
   const selectionExpiresAt = useMemo(() => {
     const expirationTime = getSelectionExpirationTime(selectedSeats);
@@ -785,18 +756,11 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
               <BookingCart
                 selectedSeats={selectedSeats}
                 onRemoveSeat={handleRemoveSeat}
-                onBookNow={() => setShowBookingConfirm(true)}
+                onBookNow={() => navigate(`/events/${eventId}/checkout`)}
                 onTimerExpired={handleReleaseTicket}
                 timerStart={timerStart}
                 expiresAt={selectionExpiresAt}
                 total={total}
-                couponCode={couponCode}
-                setCouponCode={setCouponCode}
-                appliedCoupon={appliedCoupon}
-                onApplyCoupon={handleApplyCoupon}
-                onRemoveCoupon={handleRemoveCoupon}
-                couponError={couponError}
-                isApplyingCoupon={isApplyingCoupon}
               />
             </div>
           </aside>
@@ -833,100 +797,18 @@ export function SeatSelector({ eventId, event, initialSeats, initialRawSeats, in
               onRemoveSeat={handleRemoveSeat}
               onBookNow={() => {
                 setShowMobileCart(false);
-                setShowBookingConfirm(true);
+                navigate(`/events/${eventId}/checkout`);
               }}
               onTimerExpired={handleReleaseTicket}
               timerStart={timerStart}
               expiresAt={selectionExpiresAt}
               total={total}
-              couponCode={couponCode}
-              setCouponCode={setCouponCode}
-              appliedCoupon={appliedCoupon}
-              onApplyCoupon={handleApplyCoupon}
-              onRemoveCoupon={handleRemoveCoupon}
-              couponError={couponError}
-              isApplyingCoupon={isApplyingCoupon}
             />
           </div>
         </div>
       )}
 
-      {showBookingConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => !isCheckoutLoading && setShowBookingConfirm(false)} />
-          <div className="relative w-full max-w-md rounded-[32px] bg-white p-8 text-center shadow-2xl">
-            {checkoutSuccess ? (
-              <>
-                <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600">
-                  <Check size={30} />
-                </div>
-                <h3 className="mt-5 text-2xl font-black text-slate-950">Payment Successful!</h3>
-                <p className="mt-3 text-sm leading-7 text-slate-500">
-                  Your order #{orderId} has been confirmed. Your tickets are now available.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowBookingConfirm(false);
-                    navigate("/orders");
-                  }}
-                  className="mt-6 rounded-full bg-green-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-green-500"
-                >
-                  View My Tickets
-                </button>
-              </>
-            ) : (
-              <>
-                <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-violet-100 text-violet-600">
-                  <ShoppingBag size={30} />
-                </div>
-                <h3 className="mt-5 text-2xl font-black text-slate-950">Confirm Purchase</h3>
-                {appliedCoupon ? (
-                  <div className="mt-3 text-sm text-slate-500 space-y-1.5 border border-slate-100 bg-slate-50 p-4 rounded-2xl">
-                    <p>You are about to purchase {selectedSeats.length} ticket(s).</p>
-                    <div className="flex justify-between items-center text-xs">
-                      <span>Subtotal:</span>
-                      <span className="line-through">${total.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-xs text-green-600 font-semibold">
-                      <span>Discount ({couponCode.toUpperCase()}):</span>
-                      <span>-${appliedCoupon.discountAmount.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-base font-black text-slate-950 border-t border-slate-200 pt-1.5">
-                      <span>Total:</span>
-                      <span>${appliedCoupon.finalPrice.toLocaleString()}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="mt-3 text-sm leading-7 text-slate-500">
-                    You are about to purchase {selectedSeats.length} ticket(s) for a total of ${total.toLocaleString()}.
-                  </p>
-                )}
-                <button
-                  type="button"
-                  disabled={isCheckoutLoading}
-                  onClick={handleCheckout}
-                  className="mt-6 w-full flex justify-center items-center rounded-full bg-violet-600 px-6 py-4 text-sm font-bold text-white transition hover:bg-violet-500 disabled:opacity-50"
-                >
-                  {isCheckoutLoading ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  ) : (
-                    "Pay Now"
-                  )}
-                </button>
-                <button
-                  type="button"
-                  disabled={isCheckoutLoading}
-                  onClick={() => setShowBookingConfirm(false)}
-                  className="mt-3 w-full rounded-full bg-slate-100 px-6 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-200 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+
 
       {showHoldExpiredModal && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">

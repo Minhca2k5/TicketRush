@@ -19,6 +19,8 @@ import UserSettingsPage from './pages/UserSettingsPage';
 
 import AdminCouponsPage from './pages/admin/AdminCouponsPage';
 
+import CheckoutPage from './pages/CheckoutPage';
+
 export function AppRoutes() {
   return (
     <Routes>
@@ -46,6 +48,14 @@ export function AppRoutes() {
         element={
           <ProtectedRoute requiredRole="CUSTOMER">
             <EventDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/events/:id/checkout"
+        element={
+          <ProtectedRoute requiredRole="CUSTOMER">
+            <CheckoutPage />
           </ProtectedRoute>
         }
       />
