@@ -203,7 +203,7 @@ export default function TicketSalesPage() {
       try {
         const [ordersResponse, eventsResponse, usersResponse] = await Promise.all([
           api.get('/booking/admin/orders'),
-          api.get('/events').catch(() => null),
+          api.get('/events?includeDraft=true').catch(() => null),
           getAuthUsers().catch(() => []),
         ]);
 

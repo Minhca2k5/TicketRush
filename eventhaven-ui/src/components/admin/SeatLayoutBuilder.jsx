@@ -10,8 +10,9 @@ const MIN_VIEWPORT_SCALE = 0.3;
 const MAX_VIEWPORT_SCALE = 1.5;
 const ZOOM_STEP = 0.12;
 const SEAT_RADIUS = 6;
-const ZONE_BOUNDS_PADDING = SEAT_RADIUS + 4;
+const ZONE_BOUNDS_PADDING = SEAT_RADIUS;
 const ZONE_TOOLTIP_HEIGHT = 34;
+const MAX_CACHE_PIXEL_RATIO = 2;
 
 const staticElementOptions = [
   { type: 'stage', label: 'STAGE', width: 220, height: 64, fill: '#312e81', stroke: '#a78bfa' },
@@ -266,6 +267,41 @@ function getZoneArea(zone) {
   return (bounds.maxX - bounds.minX) * (bounds.maxY - bounds.minY);
 }
 
+function getZoneCacheKey(zone, isSelected) {
+  return [
+    zone.id,
+    zone.name,
+    zone.price,
+    zone.rows,
+    zone.seatsPerRow,
+    zone.rowLabel,
+    zone.rowGap,
+    zone.seatSpacing,
+    zone.rotation,
+    isSelected ? 'selected' : 'idle',
+  ].join('|');
+}
+
+function getStaticCacheKey(element, isSelected) {
+  return [
+    element.id,
+    element.type,
+    element.label,
+    element.width,
+    element.height,
+    element.rotation,
+    isSelected ? 'selected' : 'idle',
+  ].join('|');
+}
+
+function cacheKonvaNode(node) {
+  if (!node || node.isDragging?.()) return;
+  const pixelRatio = clamp(window.devicePixelRatio || 1, 1, MAX_CACHE_PIXEL_RATIO);
+  node.clearCache();
+  node.cache({ pixelRatio });
+  node.getLayer()?.batchDraw();
+}
+
 function FieldLabel({ children }) {
   return <span className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">{children}</span>;
 }
@@ -295,6 +331,8 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
   const autoCenteredLayoutRef = useRef('');
   const zoneRefsRef = useRef(new Map());
   const staticRefsRef = useRef(new Map());
+  const zoneCacheKeysRef = useRef(new Map());
+  const staticCacheKeysRef = useRef(new Map());
   const [stageWidth, setStageWidth] = useState(980);
   const [stageHeight, setStageHeight] = useState(680);
   const [viewportScale, setViewportScale] = useState(() => clamp(initialEditorState.viewportScale, MIN_VIEWPORT_SCALE, MAX_VIEWPORT_SCALE));
@@ -308,6 +346,7 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
   const [selectedStaticId, setSelectedStaticId] = useState(() => initialEditorState.selectedStaticId);
   const [draft, setDraft] = useState(() => initialEditorState.draft);
   const [zoneTooltip, setZoneTooltip] = useState(null);
+  const [dragPreview, setDragPreview] = useState(null);
 
   useEffect(() => {
     const node = containerRef.current;
@@ -357,6 +396,7 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
     setViewportScale(clamp(nextState.viewportScale, MIN_VIEWPORT_SCALE, MAX_VIEWPORT_SCALE));
     setViewportOffset(nextState.viewportOffset);
     setIsPanning(false);
+    setDragPreview(null);
     panStartRef.current = null;
     hydratedEventIdRef.current = eventId;
     autoCenteredLayoutRef.current = '';
@@ -438,9 +478,11 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
       : selectedStaticId
         ? staticRefsRef.current.get(selectedStaticId)
         : null;
-    transformer.nodes(selectedNode ? [selectedNode] : []);
+    transformer.visible(!dragPreview);
+    transformer.nodes(!dragPreview && selectedNode ? [selectedNode] : []);
+    transformer.moveToTop();
     transformer.getLayer()?.batchDraw();
-  }, [selectedStaticId, selectedZoneId, zones, staticElements]);
+  }, [dragPreview, selectedStaticId, selectedZoneId, zones, staticElements]);
 
   const syncDraft = (zone) => {
     setSelectedZoneId(zone.id);
@@ -535,18 +577,52 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
   });
 
   const updateZonePosition = (zoneId, event) => {
-    const point = normalize({ x: event.target.x(), y: event.target.y() });
+    const node = event.currentTarget || event.target;
+    const point = normalize({ x: node.x(), y: node.y() });
+    zoneCacheKeysRef.current.delete(zoneId);
     setZones((current) => current.map((zone) => (
       zone.id === zoneId ? { ...zone, ...point } : zone
     )));
     setDraft((current) => (current.id === zoneId ? { ...current, ...point } : current));
+    setDragPreview(null);
+    setCanvasCursor('default');
   };
 
   const updateStaticPosition = (elementId, event) => {
-    const point = normalize({ x: event.target.x(), y: event.target.y() });
+    const node = event.currentTarget || event.target;
+    const point = normalize({ x: node.x(), y: node.y() });
+    staticCacheKeysRef.current.delete(elementId);
     setStaticElements((current) => current.map((element) => (
       element.id === elementId ? { ...element, ...point } : element
     )));
+    setDragPreview(null);
+    setCanvasCursor('default');
+  };
+
+  const beginZoneDrag = (zone, event) => {
+    const node = event.currentTarget || event.target;
+    node.clearCache?.();
+    node.moveToTop?.();
+    event.cancelBubble = true;
+    setZoneTooltip(null);
+    setCanvasCursor('grabbing');
+    if (selectedZoneId !== zone.id) {
+      syncDraft(zone);
+    }
+    setDragPreview({ type: 'zone', id: zone.id });
+  };
+
+  const beginStaticDrag = (element, event) => {
+    const node = event.currentTarget || event.target;
+    node.clearCache?.();
+    node.moveToTop?.();
+    event.cancelBubble = true;
+    setZoneTooltip(null);
+    setCanvasCursor('grabbing');
+    if (selectedStaticId !== element.id) {
+      selectStaticElement(element.id);
+    }
+    setDragPreview({ type: 'static', id: element.id });
   };
 
   const syncTransformFromTransformer = () => {
@@ -777,6 +853,48 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
       return getZoneArea(second) - getZoneArea(first);
     })
   ), [selectedZoneId, zones]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const liveZoneIds = new Set(renderedZones.map((zone) => zone.id));
+      Array.from(zoneCacheKeysRef.current.keys()).forEach((zoneId) => {
+        if (!liveZoneIds.has(zoneId)) zoneCacheKeysRef.current.delete(zoneId);
+      });
+
+      renderedZones.forEach((zone) => {
+        if (dragPreview?.type === 'zone' && dragPreview.id === zone.id) return;
+        const node = zoneRefsRef.current.get(zone.id);
+        if (!node) return;
+        const cacheKey = getZoneCacheKey(zone, zone.id === selectedZoneId);
+        if (zoneCacheKeysRef.current.get(zone.id) === cacheKey) return;
+        cacheKonvaNode(node);
+        zoneCacheKeysRef.current.set(zone.id, cacheKey);
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [dragPreview, renderedZones, selectedZoneId]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const liveStaticIds = new Set(staticElements.map((element) => element.id));
+      Array.from(staticCacheKeysRef.current.keys()).forEach((elementId) => {
+        if (!liveStaticIds.has(elementId)) staticCacheKeysRef.current.delete(elementId);
+      });
+
+      staticElements.forEach((element) => {
+        if (dragPreview?.type === 'static' && dragPreview.id === element.id) return;
+        const node = staticRefsRef.current.get(element.id);
+        if (!node) return;
+        const cacheKey = getStaticCacheKey(element, element.id === selectedStaticId);
+        if (staticCacheKeysRef.current.get(element.id) === cacheKey) return;
+        cacheKonvaNode(node);
+        staticCacheKeysRef.current.set(element.id, cacheKey);
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [dragPreview, selectedStaticId, staticElements]);
 
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -1108,6 +1226,7 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
               onMouseLeave={() => {
                 setIsPanning(false);
                 panStartRef.current = null;
+                setDragPreview(null);
                 setCanvasCursor('default');
                 setZoneTooltip(null);
               }}
@@ -1158,6 +1277,7 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                   const point = denormalize(element);
                   const config = getStaticElementConfig(element.type);
                   const isSelected = element.id === selectedStaticId;
+                  const isDraggingStatic = dragPreview?.type === 'static' && dragPreview.id === element.id;
                   const elementRotation = Number(element.rotation || 0);
                   return (
                     <Group
@@ -1173,6 +1293,10 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                       y={point.y}
                       rotation={elementRotation}
                       draggable
+                      onDragStart={(event) => beginStaticDrag(element, event)}
+                      onDragMove={(event) => {
+                        event.cancelBubble = true;
+                      }}
                       onClick={(event) => {
                         event.cancelBubble = true;
                         selectStaticElement(element.id);
@@ -1190,9 +1314,11 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                         height={element.height}
                         cornerRadius={element.type === 'exit' ? 12 : 24}
                         fill={config.fill}
-                        stroke={isSelected ? '#ffffff' : config.stroke}
-                        strokeWidth={isSelected ? 3 : 2}
-                        opacity={0.9}
+                        stroke={isDraggingStatic ? '#7c3aed' : isSelected ? '#ffffff' : config.stroke}
+                        strokeWidth={isSelected || isDraggingStatic ? 3 : 2}
+                        dash={isDraggingStatic ? [10, 8] : []}
+                        opacity={isDraggingStatic ? 0.72 : 0.9}
+                        perfectDrawEnabled={false}
                       />
                       <Group rotation={-elementRotation}>
                         <Text
@@ -1204,6 +1330,7 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                           fontStyle="bold"
                           fontSize={16}
                           align="center"
+                          listening={false}
                         />
                       </Group>
                       {false && isSelected ? (
@@ -1232,8 +1359,11 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                   const point = denormalize(zone);
                   const seats = buildSeats(zone);
                   const isSelected = zone.id === selectedZoneId;
+                  const isDraggingZone = dragPreview?.type === 'zone' && dragPreview.id === zone.id;
                   const zoneRotation = Number(zone.rotation || 0);
                   const bounds = getZoneBounds(zone, seats);
+                  const boundsWidth = bounds.maxX - bounds.minX;
+                  const boundsHeight = bounds.maxY - bounds.minY;
 
                   return (
                     <Group
@@ -1249,9 +1379,17 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                       y={point.y}
                       rotation={zoneRotation}
                       draggable
-                      onMouseEnter={(event) => updateZoneTooltip(event, zone)}
-                      onMouseMove={(event) => updateZoneTooltip(event, zone)}
+                      onMouseEnter={(event) => {
+                        if (!dragPreview) updateZoneTooltip(event, zone);
+                      }}
+                      onMouseMove={(event) => {
+                        if (!dragPreview) updateZoneTooltip(event, zone);
+                      }}
                       onMouseLeave={() => setZoneTooltip(null)}
+                      onDragStart={(event) => beginZoneDrag(zone, event)}
+                      onDragMove={(event) => {
+                        event.cancelBubble = true;
+                      }}
                       onClick={(event) => {
                         event.cancelBubble = true;
                         syncDraft(zone);
@@ -1265,54 +1403,78 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
                       <Rect
                         x={bounds.minX}
                         y={bounds.minY}
-                        width={bounds.maxX - bounds.minX}
-                        height={bounds.maxY - bounds.minY}
+                        width={boundsWidth}
+                        height={boundsHeight}
                         fill="rgba(124,58,237,0.01)"
                         listening
+                        perfectDrawEnabled={false}
                       />
-                      {isSelected ? (
+                      {isSelected || isDraggingZone ? (
                         <Rect
                           x={bounds.minX}
                           y={bounds.minY}
-                          width={bounds.maxX - bounds.minX}
-                          height={bounds.maxY - bounds.minY}
+                          width={boundsWidth}
+                          height={boundsHeight}
                           cornerRadius={18}
-                          stroke="#a78bfa"
-                          strokeWidth={2}
+                          stroke={isDraggingZone ? '#7c3aed' : '#a78bfa'}
+                          strokeWidth={isDraggingZone ? 2.5 : 2}
                           dash={[10, 8]}
-                          opacity={0.85}
+                          fill={isDraggingZone ? 'rgba(124,58,237,0.06)' : undefined}
+                          opacity={isDraggingZone ? 0.95 : 0.85}
+                          perfectDrawEnabled={false}
                         />
                       ) : null}
 
-                      {seats.map((seat) => (
-                        <Group
-                          key={seat.id}
-                          x={seat.x}
-                          y={seat.y}
-                        >
-                          <Circle
-                            radius={SEAT_RADIUS}
-                            fill={isSelected ? '#a78bfa' : '#8b5cf6'}
-                            stroke={isSelected ? '#ffffff' : '#ddd6fe'}
-                            strokeWidth={isSelected ? 1.8 : 1}
-                            shadowColor="#8b5cf6"
-                            shadowBlur={isSelected ? 8 : 4}
-                            shadowOpacity={0.28}
+                      {isDraggingZone ? (
+                        <Group rotation={-zoneRotation} listening={false}>
+                          <Text
+                            x={bounds.minX}
+                            y={-8}
+                            width={boundsWidth}
+                            align="center"
+                            text={zone.name || 'Zone'}
+                            fill="#6d28d9"
+                            fontStyle="bold"
+                            fontSize={16}
+                            ellipsis
+                            listening={false}
                           />
-                          <Group rotation={-zoneRotation}>
-                            <Text
-                              x={-8}
-                              y={-5}
-                              width={16}
-                              align="center"
-                              text={seatNumberLabel(seat.seatNumber)}
-                              fill="#ffffff"
-                              fontStyle="bold"
-                              fontSize={8}
-                            />
-                          </Group>
                         </Group>
-                      ))}
+                      ) : (
+                        seats.map((seat) => (
+                          <Group
+                            key={seat.id}
+                            x={seat.x}
+                            y={seat.y}
+                            listening={false}
+                          >
+                            <Circle
+                              radius={SEAT_RADIUS}
+                              fill={isSelected ? '#a78bfa' : '#8b5cf6'}
+                              stroke={isSelected ? '#ffffff' : '#ddd6fe'}
+                              strokeWidth={isSelected ? 1.8 : 1}
+                              shadowColor="#8b5cf6"
+                              shadowBlur={isSelected ? 8 : 4}
+                              shadowOpacity={0.28}
+                              listening={false}
+                              perfectDrawEnabled={false}
+                            />
+                            <Group rotation={-zoneRotation} listening={false}>
+                              <Text
+                                x={-8}
+                                y={-5}
+                                width={16}
+                                align="center"
+                                text={seatNumberLabel(seat.seatNumber)}
+                                fill="#ffffff"
+                                fontStyle="bold"
+                                fontSize={8}
+                                listening={false}
+                              />
+                            </Group>
+                          </Group>
+                        ))
+                      )}
 
                       {false && isSelected ? (
                         <>
@@ -1341,6 +1503,7 @@ export default function SeatLayoutBuilder({ eventId, initialLayout, onChange, on
 
                 <Transformer
                   ref={transformerRef}
+                  visible={!dragPreview}
                   rotateEnabled
                   resizeEnabled={false}
                   enabledAnchors={[]}

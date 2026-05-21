@@ -31,8 +31,10 @@ import com.ticketrush.eventservice.repository.VenueZoneRepository;
 import com.ticketrush.eventservice.realtime.SeatMapRealtimePublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -65,6 +67,7 @@ public class EventService {
     private final ObjectMapper objectMapper;
     private final SeatMapRealtimePublisher seatMapRealtimePublisher;
     private final BookingNotificationClient bookingNotificationClient;
+    private final BookingAccessClient bookingAccessClient;
 
     @Transactional
     public EventDTO createEvent(EventDTO eventDTO) {
@@ -76,24 +79,94 @@ public class EventService {
 
     @Transactional(readOnly = true)
     public EventDTO getEventById(Long id) {
+        return getEventById(id, null, null, false);
+    }
+
+    @Transactional(readOnly = true)
+    public EventDTO getEventById(Long id, String viewerUserId, String viewerRole) {
+        return getEventById(id, viewerUserId, viewerRole, false);
+    }
+
+    @Transactional(readOnly = true)
+    public EventDTO getEventById(Long id, boolean includeDraft) {
+        return getEventById(id, null, null, includeDraft);
+    }
+
+    @Transactional(readOnly = true)
+    public EventDTO getEventById(Long id, String viewerUserId, String viewerRole, boolean includeDraft) {
         Event event = eventRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Event not found"));
+        if (!includeDraft && !EventStatusPolicy.isCustomerVisible(event)) {
+            throw new RuntimeException("Event not found");
+        }
+        if (!includeDraft) {
+            ensurePastEventAccess(event, viewerUserId, viewerRole);
+        }
         return mapToDTO(event);
     }
 
     @Transactional(readOnly = true)
     public List<EventSummaryDTO> getAllEvents() {
+        return getAllEvents(null, null, false);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EventSummaryDTO> getAllEvents(String viewerUserId, String viewerRole) {
+        return getAllEvents(viewerUserId, viewerRole, false);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EventSummaryDTO> getAllEvents(boolean includeDraft) {
+        return getAllEvents(null, null, includeDraft);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EventSummaryDTO> getAllEvents(String viewerUserId, String viewerRole, boolean includeDraft) {
+        Set<Long> paidEventIds = includeDraft ? Set.of() : resolvePaidEventIds(viewerUserId, viewerRole);
         return eventRepository.findAll().stream()
+                .filter(event -> includeDraft || (EventStatusPolicy.isCustomerVisible(event) && canListEvent(event, viewerUserId, viewerRole, paidEventIds)))
                 .map(this::mapToSummaryDTO)
                 .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public List<EventSummaryDTO> searchEvents(String keyword, String category, LocalDateTime fromDate, LocalDateTime toDate) {
+        return searchEvents(keyword, category, fromDate, toDate, null, null, false);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EventSummaryDTO> searchEvents(
+            String keyword,
+            String category,
+            LocalDateTime fromDate,
+            LocalDateTime toDate,
+            String viewerUserId,
+            String viewerRole
+    ) {
+        return searchEvents(keyword, category, fromDate, toDate, viewerUserId, viewerRole, false);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EventSummaryDTO> searchEvents(String keyword, String category, LocalDateTime fromDate, LocalDateTime toDate, boolean includeDraft) {
+        return searchEvents(keyword, category, fromDate, toDate, null, null, includeDraft);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EventSummaryDTO> searchEvents(
+            String keyword,
+            String category,
+            LocalDateTime fromDate,
+            LocalDateTime toDate,
+            String viewerUserId,
+            String viewerRole,
+            boolean includeDraft
+    ) {
         String normalizedKeyword = (keyword == null || keyword.trim().isEmpty()) ? null : keyword.trim();
         String normalizedCategory = normalizeCategoryKey(category);
+        Set<Long> paidEventIds = includeDraft ? Set.of() : resolvePaidEventIds(viewerUserId, viewerRole);
 
         return eventRepository.findAll(Sort.by(Sort.Direction.ASC, "startTime")).stream()
+                .filter(event -> includeDraft || (EventStatusPolicy.isCustomerVisible(event) && canListEvent(event, viewerUserId, viewerRole, paidEventIds)))
                 .filter(event -> matchesKeyword(event, normalizedKeyword))
                 .filter(event -> matchesCategory(event, normalizedCategory))
                 .filter(event -> matchesDateRange(event, fromDate, toDate))
@@ -184,6 +257,14 @@ public class EventService {
 
     @Transactional
     public List<SeatDTO> getSeatMap(Long eventId) {
+        return getSeatMap(eventId, null, null);
+    }
+
+    @Transactional
+    public List<SeatDTO> getSeatMap(Long eventId, String viewerUserId, String viewerRole) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new RuntimeException("Event not found"));
+        ensurePastEventAccess(event, viewerUserId, viewerRole);
         seatService.releaseExpiredLocks(eventId);
         return seatRepository.findByEventId(eventId).stream()
                 .map(this::mapSeatToDTO)
@@ -192,10 +273,21 @@ public class EventService {
 
     @Transactional
     public SeatMapLayoutDTO getSeatMapLayout(Long eventId) {
-        seatService.releaseExpiredLocks(eventId);
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new RuntimeException("Event not found"));
+        return getSeatMapLayout(eventId, null, null, event);
+    }
 
+    @Transactional
+    public SeatMapLayoutDTO getSeatMapLayout(Long eventId, String viewerUserId, String viewerRole) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new RuntimeException("Event not found"));
+        return getSeatMapLayout(eventId, viewerUserId, viewerRole, event);
+    }
+
+    private SeatMapLayoutDTO getSeatMapLayout(Long eventId, String viewerUserId, String viewerRole, Event event) {
+        ensurePastEventAccess(event, viewerUserId, viewerRole);
+        seatService.releaseExpiredLocks(eventId);
         List<Seat> seats = seatRepository.findByEventId(eventId);
 
         List<SeatZoneLayoutDTO> zones = seats.stream()
@@ -621,7 +713,7 @@ public class EventService {
         dto.setEndTime(event.getEndTime());
         dto.setImageUrl(event.getImageUrl());
         dto.setBannerUrl(event.getBannerUrl());
-        dto.setStatus(event.getStatus());
+        dto.setStatus(EventStatusPolicy.resolveDisplayStatus(event));
         dto.setVenue(mapVenueToDTO(event.getVenue()));
         dto.setMinPrice(resolveSummaryMinPrice(event, eventPriceTiers, seats));
         dto.setSoldOut(isEventSoldOut(seats));
@@ -728,7 +820,7 @@ public class EventService {
         dto.setEndTime(event.getEndTime());
         dto.setImageUrl(event.getImageUrl());
         dto.setBannerUrl(event.getBannerUrl());
-        dto.setStatus(event.getStatus());
+        dto.setStatus(EventStatusPolicy.resolveDisplayStatus(event));
         dto.setVenue(mapVenueToDTO(event.getVenue()));
         dto.setZones(mapZonesToDTO(seats, eventPriceTiers));
         dto.setPriceTiers(priceTierDTOs);
@@ -1077,22 +1169,65 @@ public class EventService {
                 .count();
     }
 
+    private Set<Long> resolvePaidEventIds(String viewerUserId, String viewerRole) {
+        if (isAdmin(viewerRole)) {
+            return Set.of();
+        }
+
+        String bookingUserId = toBookingUserId(viewerUserId);
+        if (bookingUserId == null) {
+            return Set.of();
+        }
+
+        return bookingAccessClient.getPaidEventIds(bookingUserId);
+    }
+
+    private boolean canListEvent(Event event, String viewerUserId, String viewerRole, Set<Long> paidEventIds) {
+        if (!isPastEvent(event) || isAdmin(viewerRole)) {
+            return true;
+        }
+
+        String bookingUserId = toBookingUserId(viewerUserId);
+        return bookingUserId != null && paidEventIds.contains(event.getId());
+    }
+
+    private void ensurePastEventAccess(Event event, String viewerUserId, String viewerRole) {
+        if (!isPastEvent(event) || isAdmin(viewerRole)) {
+            return;
+        }
+
+        String bookingUserId = toBookingUserId(viewerUserId);
+        if (bookingUserId != null && bookingAccessClient.hasPaidOrderForEvent(bookingUserId, event.getId())) {
+            return;
+        }
+
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Past events are only available to attendees");
+    }
+
+    private boolean isPastEvent(Event event) {
+        String status = trimToNull(event.getStatus());
+        if (status != null && List.of("PAST", "ENDED", "COMPLETED").contains(status.toUpperCase(Locale.ROOT))) {
+            return true;
+        }
+
+        LocalDateTime endTime = event.getEndTime();
+        return endTime != null && !endTime.isAfter(LocalDateTime.now());
+    }
+
+    private boolean isAdmin(String role) {
+        return role != null && "ADMIN".equalsIgnoreCase(role.trim());
+    }
+
+    private String toBookingUserId(String viewerUserId) {
+        String normalized = trimToNull(viewerUserId);
+        if (normalized == null) {
+            return null;
+        }
+        return normalized.startsWith("user-") ? normalized : "user-" + normalized;
+    }
+
     private String resolveStatus(EventDTO dto) {
-        String explicitStatus = trimToNull(dto.getStatus());
-        if (explicitStatus != null) {
-            return explicitStatus.toUpperCase();
-        }
-        if (dto.getStartTime() == null) {
-            return "DRAFT";
-        }
-        LocalDateTime now = LocalDateTime.now();
-        if (dto.getEndTime() != null && dto.getEndTime().isBefore(now)) {
-            return "PAST";
-        }
-        if (!dto.getStartTime().isAfter(now)) {
-            return "LIVE";
-        }
-        return "PENDING";
+        return EventStatusPolicy.resolveSubmittedStatus(dto.getStatus(), dto.getStartTime(), dto.getEndTime());
     }
 
     private int ensureRange(Integer value, int min, int max, String message) {

@@ -616,6 +616,7 @@ export default function CustomerSeatMapCanvas({
   layout,
   liveSeats = [],
   selectedSeats = [],
+  readOnly = false,
   canvasTheme = 'light',
   fillViewport = false,
   className = '',
@@ -1024,8 +1025,16 @@ export default function CustomerSeatMapCanvas({
                       x={point.x}
                       y={point.y}
                       opacity={isUnavailable ? 0.68 : 1}
-                      onClick={() => !isUnavailable && handleSeatToggle(seat, zone, { tierName: zone.name, price: getSeatPrice(liveSeat, zone) })}
-                      onTap={() => !isUnavailable && handleSeatToggle(seat, zone, { tierName: zone.name, price: getSeatPrice(liveSeat, zone) })}
+                      onMouseEnter={() => setCanvasCursor(readOnly || isUnavailable ? 'not-allowed' : 'pointer')}
+                      onMouseLeave={() => setCanvasCursor(panStartRef.current ? 'grabbing' : 'grab')}
+                      onClick={() => {
+                        if (!readOnly && isUnavailable) return;
+                        handleSeatToggle(seat, zone, { tierName: zone.name, price: getSeatPrice(liveSeat, zone) });
+                      }}
+                      onTap={() => {
+                        if (!readOnly && isUnavailable) return;
+                        handleSeatToggle(seat, zone, { tierName: zone.name, price: getSeatPrice(liveSeat, zone) });
+                      }}
                     >
                       <Rect
                         x={-SEAT_SIZE / 2}

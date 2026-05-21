@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { SeatZone } from "./SeatZone";
 
-export function SeatMap({ seats, seatLayout, selectedSeats, onSeatSelect }) {
+export function SeatMap({ seats, seatLayout, selectedSeats, readOnly = false, onSeatSelect }) {
   const selectedIds = useMemo(() => new Set(selectedSeats.map((seat) => seat.id)), [selectedSeats]);
 
   const groupedZones = useMemo(() => {
@@ -71,6 +71,7 @@ export function SeatMap({ seats, seatLayout, selectedSeats, onSeatSelect }) {
                 key={zone.zoneId}
                 zone={zone}
                 selectedIds={selectedIds}
+                readOnly={readOnly}
                 onSeatSelect={onSeatSelect}
               />
             ))}

@@ -8,6 +8,7 @@ const EMPTY_FORM = {
   description: '',
   organizer: '',
   category: '',
+  status: 'PENDING',
   startTime: '',
   endTime: '',
   imageUrl: '',
@@ -21,6 +22,16 @@ const EMPTY_FORM = {
 };
 
 const categories = ['Concert', 'Sport', 'Theater', 'Conference', 'General'];
+const eventStatuses = [
+  { value: 'LIVE', label: 'Live', description: 'Visible and open for booking.' },
+  { value: 'PENDING', label: 'Pending', description: 'Visible to customers, booking disabled.' },
+  { value: 'DRAFT', label: 'Draft', description: 'Admin only.' },
+];
+
+function normalizeEditableStatus(status) {
+  const normalized = String(status || 'PENDING').trim().toUpperCase();
+  return eventStatuses.some((option) => option.value === normalized) ? normalized : 'PENDING';
+}
 
 const inputCls = (error) =>
   `w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition ${
@@ -96,6 +107,7 @@ function normalizeInitial(initial) {
     description: initial.description || '',
     organizer: initial.organizer || '',
     category: initial.category || '',
+    status: normalizeEditableStatus(initial.status),
     startTime: toDateTimeLocal(initial.startTime),
     endTime: toDateTimeLocal(initial.endTime),
     imageUrl: initial.bannerUrl || initial.imageUrl || '',
@@ -259,6 +271,7 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
       if (!form.name.trim()) nextErrors.name = 'Event title is required';
       if (!form.category.trim()) nextErrors.category = 'Category is required';
       if (!form.organizer.trim()) nextErrors.organizer = 'Organizer is required';
+      if (!form.status.trim()) nextErrors.status = 'Status is required';
     }
 
     if (step === 2) {
@@ -320,6 +333,7 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
         name: form.name.trim(),
         category: form.category.trim(),
         organizer: form.organizer.trim(),
+        status: form.status || 'PENDING',
         description: form.description.trim() || null,
         startTime: form.startTime || null,
         endTime: form.endTime || null,
@@ -432,6 +446,21 @@ export default function EventFormModal({ initial, onClose, onSaved }) {
                     <option key={category} value={category}>{category}</option>
                   ))}
                 </select>
+              </Field>
+
+              <Field label="Status *" error={errors.status} hint="Live can sell tickets. Pending is visible but locked. Draft is admin-only.">
+                <select
+                  className={inputCls(errors.status)}
+                  value={form.status}
+                  onChange={(event) => setField('status', event.target.value)}
+                >
+                  {eventStatuses.map((status) => (
+                    <option key={status.value} value={status.value}>{status.label}</option>
+                  ))}
+                </select>
+                <p className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                  {eventStatuses.find((status) => status.value === form.status)?.description}
+                </p>
               </Field>
 
               <Field label="Organizer *" error={errors.organizer}>

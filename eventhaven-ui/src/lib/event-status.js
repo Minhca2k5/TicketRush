@@ -6,36 +6,47 @@ export function getEventEndDate(event) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function normalizeStatus(status) {
+  return String(status || '').trim().toUpperCase();
+}
+
 export function isEventPast(event, now = new Date()) {
-  const normalizedStatus = String(event?.status || '').trim().toUpperCase();
+  const normalizedStatus = normalizeStatus(event?.status);
   if (['PAST', 'ENDED', 'COMPLETED'].includes(normalizedStatus)) return true;
+  if (['LIVE', 'PENDING', 'DRAFT'].includes(normalizedStatus)) return false;
 
   const referenceDate = now instanceof Date ? now : new Date();
   const endDate = getEventEndDate(event);
   return endDate ? endDate.getTime() < referenceDate.getTime() : false;
 }
 
-export function isEventBookable(event, now = new Date()) {
-  return !isEventPast(event, now);
-}
-
 export function getAdminEventStatus(event, now = new Date()) {
-  if (isEventPast(event, now)) return 'Past';
-
-  const normalizedStatus = String(event?.status || '').trim().toUpperCase();
+  const normalizedStatus = normalizeStatus(event?.status);
   if (normalizedStatus === 'LIVE') return 'Live';
   if (normalizedStatus === 'PENDING') return 'Pending';
   if (normalizedStatus === 'DRAFT') return 'Draft';
+  if (['PAST', 'ENDED', 'COMPLETED'].includes(normalizedStatus)) return 'Past';
+
+  if (isEventPast(event, now)) return 'Past';
 
   if (!event?.startTime) return 'Draft';
 
   const startDate = new Date(event.startTime);
   if (Number.isNaN(startDate.getTime())) return 'Draft';
 
-  const diff = startDate.getTime() - now.getTime();
-  if (diff <= 0) return 'Live';
-  if (diff < 1000 * 60 * 60 * 24 * 14) return 'Pending';
-  return 'Draft';
+  return startDate.getTime() > now.getTime() ? 'Pending' : 'Live';
+}
+
+export function isEventBookable(event, now = new Date()) {
+  return getAdminEventStatus(event, now) === 'Live';
+}
+
+export function isCustomerVisibleEvent(event, now = new Date()) {
+  return getAdminEventStatus(event, now) !== 'Draft';
+}
+
+export function isEventPending(event, now = new Date()) {
+  return getAdminEventStatus(event, now) === 'Pending';
 }
 
 export function getApiEventStatus(event, now = new Date()) {

@@ -30,8 +30,21 @@ public class EventReviewController {
     @PostMapping
     public ResponseEntity<ApiResponse<EventReviewDTO>> submitReview(
             @PathVariable Long eventId,
+            @RequestHeader(value = "X-User-Id", required = false) String viewerUserId,
             @RequestBody EventReviewRequestDTO request
     ) {
+        String bookingUserId = toBookingUserId(viewerUserId);
+        if (bookingUserId != null) {
+            request.setUserId(bookingUserId);
+        }
         return ResponseEntity.ok(ApiResponse.success("Review submitted successfully", reviewService.submitReview(eventId, request)));
+    }
+
+    private String toBookingUserId(String viewerUserId) {
+        if (viewerUserId == null || viewerUserId.isBlank()) {
+            return null;
+        }
+        String normalized = viewerUserId.trim();
+        return normalized.startsWith("user-") ? normalized : "user-" + normalized;
     }
 }

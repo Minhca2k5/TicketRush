@@ -189,6 +189,24 @@ public class BookingService {
         return orders.stream().map(this::mapOrderToDTO).collect(Collectors.toList());
     }
 
+    public boolean userHasPaidOrderForEvent(String userId, Long eventId) {
+        if (userId == null || userId.isBlank() || eventId == null) {
+            return false;
+        }
+        return orderRepository.existsByUserIdAndEventIdAndStatusIgnoreCase(userId.trim(), eventId, "PAID");
+    }
+
+    public List<Long> getPaidEventIds(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return List.of();
+        }
+        return orderRepository.findByUserIdAndStatusIgnoreCase(userId.trim(), "PAID").stream()
+                .map(Order::getEventId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
     public List<OrderDTO> getAllOrders() {
         return orderRepository.findAll(Sort.by(Sort.Direction.DESC, "createdAt"))
                 .stream()

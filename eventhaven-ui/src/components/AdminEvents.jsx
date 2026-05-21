@@ -167,7 +167,7 @@ export default function AdminEvents() {
   const loadEvents = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/events');
+      const response = await api.get('/events?includeDraft=true');
       const raw = response.data?.data?.content || response.data?.data || response.data || [];
       setEvents(Array.isArray(raw) && raw.length ? raw : fallbackEvents);
     } catch {
@@ -240,7 +240,7 @@ export default function AdminEvents() {
   const handleOpenEdit = async (eventId) => {
     setLoadingEditor(true);
     try {
-      const response = await api.get(`/events/${eventId}`);
+      const response = await api.get(`/events/${eventId}?includeDraft=true`);
       const payload = response.data?.data || response.data;
       setEditingEvent(payload);
       setShowForm(true);

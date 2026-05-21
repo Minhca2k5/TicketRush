@@ -5,7 +5,7 @@ import api from '../services/api';
 import { getAuthRole } from '../lib/auth';
 import HeroSlider from './HeroSlider';
 import { getEventPriceInfo } from '../lib/event-pricing';
-import { isEventBookable } from '../lib/event-status';
+import { isCustomerVisibleEvent, isEventBookable } from '../lib/event-status';
 
 const inferCategory = (event) => {
   const text = `${event.name || ''} ${event.description || ''}`.toLowerCase();
@@ -52,6 +52,7 @@ function EventCard({ event }) {
   const locationText = resolveEventLocation(event);
   const priceInfo = getEventPriceInfo(event);
   const startTime = event.startTime ? new Date(event.startTime).toLocaleString() : 'Date TBA';
+  const canBook = isEventBookable(event);
 
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_12px_34px_rgba(15,23,42,0.08)] transition duration-300 hover:-translate-y-1 hover:border-violet-200 hover:shadow-xl">
@@ -110,7 +111,7 @@ function EventCard({ event }) {
             className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition duration-200 hover:from-violet-500 hover:to-indigo-500 hover:shadow-violet-500/35 focus:outline-none focus:ring-4 focus:ring-violet-200"
           >
             <Ticket size={16} />
-            Buy Ticket
+            {canBook ? 'Buy Ticket' : 'View Details'}
           </Link>
         </div>
       </div>
@@ -205,7 +206,7 @@ export default function Home() {
   }, [loadError, loadEvents]);
 
   const normalizedEvents = useMemo(() => (
-    events.filter((event) => isEventBookable(event)).map((event) => ({
+    events.filter((event) => isCustomerVisibleEvent(event)).map((event) => ({
       ...event,
       category: normalizeCategory(event.category || inferCategory(event)),
     }))

@@ -33,13 +33,14 @@ public class JwtAuthenticationFilter implements GlobalFilter {
 
         logger.info("Request [{}] to path: {}", traceId, path);
 
-        if (isPublicEndpoint(exchange, path)) {
-            logger.debug("Skipping auth for public endpoint: {}", path);
-            return chain.filter(exchange);
-        }
-
-        String authHeader = exchange.getRequest().getHeaders().getFirst("Authorization");
+        ServerWebExchange sanitizedExchange = stripUserHeaders(exchange);
+        boolean publicEndpoint = isPublicEndpoint(exchange, path);
+        String authHeader = sanitizedExchange.getRequest().getHeaders().getFirst("Authorization");
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            if (publicEndpoint) {
+                logger.debug("Skipping auth for public endpoint: {}", path);
+                return chain.filter(sanitizedExchange);
+            }
             logger.warn("Unauthorized access attempt to {}: missing or invalid Authorization header", path);
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
@@ -56,18 +57,33 @@ public class JwtAuthenticationFilter implements GlobalFilter {
                 return exchange.getResponse().setComplete();
             }
             logger.debug("JWT validated for request [{}]", traceId);
-            ServerHttpRequest request = exchange.getRequest().mutate()
+            ServerHttpRequest request = sanitizedExchange.getRequest().mutate()
                     .header("X-User-Id", claims.getSubject())
                     .header("X-User-Role", role)
                     .header("X-Trace-Id", traceId)
                     .build();
-            return chain.filter(exchange.mutate().request(request).build());
+            return chain.filter(sanitizedExchange.mutate().request(request).build());
         } catch (Exception e) {
+            if (publicEndpoint) {
+                logger.debug("Ignoring invalid optional JWT for public request [{}]: {}", traceId, e.getMessage());
+                return chain.filter(sanitizedExchange);
+            }
             logger.warn("Invalid JWT for request [{}]: {}", traceId, e.getMessage());
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
 
+    }
+
+    private ServerWebExchange stripUserHeaders(ServerWebExchange exchange) {
+        ServerHttpRequest request = exchange.getRequest().mutate()
+                .headers(headers -> {
+                    headers.remove("X-User-Id");
+                    headers.remove("X-User-Role");
+                    headers.remove("X-Trace-Id");
+                })
+                .build();
+        return exchange.mutate().request(request).build();
     }
 
     private boolean isPublicEndpoint(ServerWebExchange exchange, String path) {
@@ -90,6 +106,7 @@ public class JwtAuthenticationFilter implements GlobalFilter {
         return path.startsWith("/auth/dashboard")
                 || path.startsWith("/auth/users")
                 || path.startsWith("/auth/settings")
+                || path.contains("/internal/")
                 || path.contains("/admin/");
     }
 }

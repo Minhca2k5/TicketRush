@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { SeatItem } from "./SeatItem";
 
-export const SeatZone = memo(function SeatZone({ zone, selectedIds, onSeatSelect }) {
+export const SeatZone = memo(function SeatZone({ zone, selectedIds, readOnly = false, onSeatSelect }) {
   return (
     <section className="w-full overflow-hidden rounded-[22px] border border-violet-100 bg-white/85 p-4 shadow-sm md:p-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -22,6 +22,7 @@ export const SeatZone = memo(function SeatZone({ zone, selectedIds, onSeatSelect
             key={`${zone.zoneId}-${row.rowName}`}
             row={row}
             selectedIds={selectedIds}
+            readOnly={readOnly}
             onSeatSelect={onSeatSelect}
           />
         ))}
@@ -30,7 +31,7 @@ export const SeatZone = memo(function SeatZone({ zone, selectedIds, onSeatSelect
   );
 }, areZonesEqual);
 
-const SeatRow = memo(function SeatRow({ row, selectedIds, onSeatSelect }) {
+const SeatRow = memo(function SeatRow({ row, selectedIds, readOnly = false, onSeatSelect }) {
   return (
     <div className="grid grid-cols-[32px_minmax(0,1fr)] items-center gap-3">
       <span className="flex h-11 items-center justify-center text-sm font-bold text-slate-500">
@@ -43,6 +44,7 @@ const SeatRow = memo(function SeatRow({ row, selectedIds, onSeatSelect }) {
               <SeatItem
                 seat={seat}
                 isSelected={selectedIds.has(seat.id)}
+                readOnly={readOnly}
                 onToggle={onSeatSelect}
               />
             </div>
@@ -54,14 +56,14 @@ const SeatRow = memo(function SeatRow({ row, selectedIds, onSeatSelect }) {
 }, areRowsEqual);
 
 function areZonesEqual(prev, next) {
-  if (prev.zone.zoneId !== next.zone.zoneId || prev.zone.rows.length !== next.zone.rows.length) {
+  if (prev.readOnly !== next.readOnly || prev.zone.zoneId !== next.zone.zoneId || prev.zone.rows.length !== next.zone.rows.length) {
     return false;
   }
 
   for (let index = 0; index < prev.zone.rows.length; index += 1) {
     if (!areRowsEqual(
-      { row: prev.zone.rows[index], selectedIds: prev.selectedIds },
-      { row: next.zone.rows[index], selectedIds: next.selectedIds }
+      { row: prev.zone.rows[index], selectedIds: prev.selectedIds, readOnly: prev.readOnly },
+      { row: next.zone.rows[index], selectedIds: next.selectedIds, readOnly: next.readOnly }
     )) {
       return false;
     }
@@ -71,6 +73,10 @@ function areZonesEqual(prev, next) {
 }
 
 function areRowsEqual(prev, next) {
+  if (prev.readOnly !== next.readOnly) {
+    return false;
+  }
+
   if (prev.row.rowName !== next.row.rowName || prev.row.seats.length !== next.row.seats.length) {
     return false;
   }

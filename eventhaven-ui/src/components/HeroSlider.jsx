@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarDays, ChevronLeft, ChevronRight, MapPin, Sparkles, Ticket } from 'lucide-react';
+import { isEventBookable } from '../lib/event-status';
 
 const HERO_IMAGE_FALLBACK = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1600&q=80';
 
@@ -83,6 +84,7 @@ export default function HeroSlider({ events = [] }) {
       <div className="relative min-h-[520px] md:min-h-[500px]">
         {slides.map((event, index) => {
           const isActive = index === activeIndex;
+          const canBook = isEventBookable(event);
 
           return (
             <div
@@ -126,7 +128,7 @@ export default function HeroSlider({ events = [] }) {
                       className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-500 to-indigo-500 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-violet-500/30 transition hover:from-violet-400 hover:to-indigo-400 focus:outline-none focus:ring-4 focus:ring-violet-300/30"
                     >
                       <Ticket size={16} />
-                      Book Now
+                      {canBook ? 'Book Now' : 'View Details'}
                     </Link>
                   ) : (
                     <span className="rounded-full border border-amber-300/30 bg-white/5 px-5 py-3 text-sm font-semibold text-amber-100">

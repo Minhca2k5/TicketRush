@@ -61,8 +61,12 @@ public class EventController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<EventSummaryDTO>>> getAllEvents() {
-        return ResponseEntity.ok(ApiResponse.success("Events fetched successfully", eventService.getAllEvents()));
+    public ResponseEntity<ApiResponse<List<EventSummaryDTO>>> getAllEvents(
+            @RequestHeader(value = "X-User-Id", required = false) String viewerUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String viewerRole,
+            @RequestParam(required = false, defaultValue = "false") boolean includeDraft
+    ) {
+        return ResponseEntity.ok(ApiResponse.success("Events fetched successfully", eventService.getAllEvents(viewerUserId, viewerRole, includeDraft)));
     }
 
     @GetMapping("/search")
@@ -71,9 +75,12 @@ public class EventController {
             @RequestParam(required = false) String category,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
-            @RequestParam(required = false, defaultValue = "date") String sort
+            @RequestParam(required = false, defaultValue = "date") String sort,
+            @RequestHeader(value = "X-User-Id", required = false) String viewerUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String viewerRole,
+            @RequestParam(required = false, defaultValue = "false") boolean includeDraft
     ) {
-        List<EventSummaryDTO> results = eventService.searchEvents(q, category, from, to);
+        List<EventSummaryDTO> results = eventService.searchEvents(q, category, from, to, viewerUserId, viewerRole, includeDraft);
 
         switch (sort) {
             case "name" -> results.sort(Comparator.comparing(e -> e.getName() != null ? e.getName().toLowerCase() : ""));
@@ -91,8 +98,13 @@ public class EventController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<EventDTO>> getEventById(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.success("Event fetched successfully", eventService.getEventById(id)));
+    public ResponseEntity<ApiResponse<EventDTO>> getEventById(
+            @PathVariable Long id,
+            @RequestHeader(value = "X-User-Id", required = false) String viewerUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String viewerRole,
+            @RequestParam(required = false, defaultValue = "false") boolean includeDraft
+    ) {
+        return ResponseEntity.ok(ApiResponse.success("Event fetched successfully", eventService.getEventById(id, viewerUserId, viewerRole, includeDraft)));
     }
 
     @PostMapping
@@ -161,18 +173,30 @@ public class EventController {
     }
 
     @GetMapping("/{id}/seats")
-    public ResponseEntity<ApiResponse<List<SeatDTO>>> getSeatMap(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.success("Seat map fetched successfully", eventService.getSeatMap(id)));
+    public ResponseEntity<ApiResponse<List<SeatDTO>>> getSeatMap(
+            @PathVariable Long id,
+            @RequestHeader(value = "X-User-Id", required = false) String viewerUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String viewerRole
+    ) {
+        return ResponseEntity.ok(ApiResponse.success("Seat map fetched successfully", eventService.getSeatMap(id, viewerUserId, viewerRole)));
     }
 
     @GetMapping("/{id}/seat-map")
-    public ResponseEntity<ApiResponse<List<SeatDTO>>> getSeatMapAlias(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.success("Seat map fetched successfully", eventService.getSeatMap(id)));
+    public ResponseEntity<ApiResponse<List<SeatDTO>>> getSeatMapAlias(
+            @PathVariable Long id,
+            @RequestHeader(value = "X-User-Id", required = false) String viewerUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String viewerRole
+    ) {
+        return ResponseEntity.ok(ApiResponse.success("Seat map fetched successfully", eventService.getSeatMap(id, viewerUserId, viewerRole)));
     }
 
     @GetMapping("/{id}/seat-layout")
-    public ResponseEntity<ApiResponse<SeatMapLayoutDTO>> getSeatMapLayout(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.success("Seat layout fetched successfully", eventService.getSeatMapLayout(id)));
+    public ResponseEntity<ApiResponse<SeatMapLayoutDTO>> getSeatMapLayout(
+            @PathVariable Long id,
+            @RequestHeader(value = "X-User-Id", required = false) String viewerUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String viewerRole
+    ) {
+        return ResponseEntity.ok(ApiResponse.success("Seat layout fetched successfully", eventService.getSeatMapLayout(id, viewerUserId, viewerRole)));
     }
 
     @PostMapping("/{eventId}/seats/{seatId}/lock")

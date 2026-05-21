@@ -70,7 +70,7 @@ export default function AdminDashboard() {
     const loadDashboard = async () => {
       try {
         const [eventsResponse, authData] = await Promise.all([
-          api.get('/events'),
+          api.get('/events?includeDraft=true'),
           getAuthDashboardSummary(),
         ]);
         const raw = eventsResponse.data?.data?.content || eventsResponse.data?.data || eventsResponse.data || [];

@@ -139,7 +139,7 @@ export default function SystemReportsPage() {
 
       try {
         const [eventsResponse, ordersResponse] = await Promise.all([
-          api.get('/events?size=200'),
+          api.get('/events?size=200&includeDraft=true'),
           api.get('/booking/admin/orders').catch(() => null),
         ]);
 
