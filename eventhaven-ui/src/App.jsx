@@ -3,6 +3,7 @@ import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { ChatbotWidget } from './components/ChatbotWidget';
 import { AppRoutes } from './AppRoutes';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { getAuthRole, isAuthenticated } from './lib/auth';
 import './App.css';
 
@@ -51,9 +52,11 @@ function AppShell() {
 
 function App() {
   return (
-    <Router>
-      <AppShell />
-    </Router>
+    <ErrorBoundary>
+      <Router>
+        <AppShell />
+      </Router>
+    </ErrorBoundary>
   );
 }
 
