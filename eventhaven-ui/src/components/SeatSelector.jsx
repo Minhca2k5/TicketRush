@@ -144,6 +144,10 @@ export function SeatSelector({ eventId, event, isPending = false, initialSeats, 
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponError, setCouponError] = useState("");
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+  const [showBookingConfirm, setShowBookingConfirm] = useState(false);
+  const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
+  const [checkoutSuccess, setCheckoutSuccess] = useState(false);
+  const [orderId, setOrderId] = useState(null);
 
   const total = useMemo(
     () => selectedSeats.reduce((sum, seat) => sum + Number(seat.price || 0), 0),
