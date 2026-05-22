@@ -385,7 +385,7 @@ export default function CheckoutPage() {
             <div className="mt-8 rounded-2xl bg-slate-900/60 p-6 border border-slate-800/50 text-left space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Event</span>
-                <span className="font-bold text-slate-200">{event?.title}</span>
+                <span className="font-bold text-slate-200">{event?.name || event?.title}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Seats</span>
@@ -418,7 +418,7 @@ export default function CheckoutPage() {
                 {event?.imageUrl && (
                   <img
                     src={event.imageUrl}
-                    alt={event.title}
+                    alt={event.name || event.title}
                     className="w-full sm:w-32 h-32 object-cover rounded-2xl bg-slate-800 border border-slate-800"
                   />
                 )}
@@ -427,7 +427,7 @@ export default function CheckoutPage() {
                     <span className="inline-block bg-violet-500/10 text-violet-400 text-xs font-extrabold px-3 py-1 rounded-full border border-violet-500/20 mb-2">
                       {event?.category || "Live Event"}
                     </span>
-                    <h1 className="text-2xl font-black text-white">{event?.title}</h1>
+                    <h1 className="text-2xl font-black text-white">{event?.name || event?.title}</h1>
                     <p className="text-sm text-slate-400 mt-1 line-clamp-1">{event?.venueName || "Venue Venue"}</p>
                   </div>
                   <div className="text-xs text-slate-500 mt-4 border-t border-slate-800/50 pt-3 flex flex-wrap gap-4">
