@@ -76,6 +76,7 @@ export default function CheckoutPage() {
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [checkoutSuccess, setCheckoutSuccess] = useState(false);
   const [orderId, setOrderId] = useState(null);
+  const [completedOrderSnapshot, setCompletedOrderSnapshot] = useState(null);
   const [showHoldExpiredModal, setShowHoldExpiredModal] = useState(false);
   const [toast, setToast] = useState(null);
 
@@ -291,7 +292,7 @@ export default function CheckoutPage() {
   };
 
   // 8. Payment & Checkout Submission
-  const handlePayNow = async (e) => {
+  const handlePayNow = useCallback(async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (!email.trim() || !name.trim()) {
       setToast({ type: "warning", message: "Please fill in all customer details." });
@@ -310,6 +311,11 @@ export default function CheckoutPage() {
         codeToApply
       );
 
+      // Snapshot checkout data before clearing seats
+      setCompletedOrderSnapshot({
+        seatLabels: selectedSeats.map((s) => s.seatLabel || s.label || s.id),
+        totalPaid: Math.max(0, subtotal - (appliedCoupon ? Number(appliedCoupon.discountAmount || 0) : 0)),
+      });
       setOrderId(order.id);
       setCheckoutSuccess(true);
       writeStoredSelection(eventId, holderId, null); // Clear from local storage
@@ -322,19 +328,24 @@ export default function CheckoutPage() {
     } finally {
       setIsCheckoutLoading(false);
     }
-  };
+  }, [email, name, selectedSeats, holderId, eventId, appliedCoupon, subtotal]);
 
   // 9. Dev shortcut: Press \ to instantly pay
+  const handlePayNowRef = useRef(handlePayNow);
+  useEffect(() => {
+    handlePayNowRef.current = handlePayNow;
+  }, [handlePayNow]);
+
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === "\\" && !checkoutSuccess && !isCheckoutLoading) {
         e.preventDefault();
-        handlePayNow();
+        handlePayNowRef.current();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [email, name, selectedSeats, holderId, eventId, appliedCoupon, checkoutSuccess, isCheckoutLoading]);
+  }, [checkoutSuccess, isCheckoutLoading]);
 
   // Remaining time formatter
   const formattedTime = useMemo(() => {
@@ -390,12 +401,12 @@ export default function CheckoutPage() {
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Seats</span>
                 <span className="font-mono font-bold text-violet-300">
-                  {selectedSeats.map((s) => s.seatLabel || s.label || s.id).join(", ")}
+                  {completedOrderSnapshot?.seatLabels?.join(", ") || selectedSeats.map((s) => s.seatLabel || s.label || s.id).join(", ")}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Amount Paid</span>
-                <span className="font-extrabold text-green-400">{currencyFormatter.format(total)}</span>
+                <span className="font-extrabold text-green-400">{currencyFormatter.format(completedOrderSnapshot?.totalPaid ?? total)}</span>
               </div>
             </div>
             <button
