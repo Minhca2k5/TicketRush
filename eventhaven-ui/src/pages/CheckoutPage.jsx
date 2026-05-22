@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Ticket, Clock3, AlertTriangle, Check, ShoppingBag, CreditCard, Sparkles, User, Mail, ShieldCheck, QrCode } from "lucide-react";
+import { ArrowLeft, Ticket, Clock3, AlertTriangle, Check, ShoppingBag, CreditCard, Sparkles, User, Mail, ShieldCheck, QrCode, Landmark } from "lucide-react";
 import { getEventById } from "../services/eventService";
 import { checkout, validateCoupon, releaseSeat } from "../services/bookingService";
 import { getProfile } from "../services/authService";
@@ -48,6 +48,7 @@ export default function CheckoutPage() {
   const [completedOrderSnapshot, setCompletedOrderSnapshot] = useState(null);
   const [showHoldExpiredModal, setShowHoldExpiredModal] = useState(false);
   const [toast, setToast] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState("qr"); // 'qr' | 'card' | 'bank'
 
   const releaseExpiredInFlightRef = useRef(false);
 
@@ -560,118 +561,214 @@ export default function CheckoutPage() {
                 )}
               </div>
 
-              {/* Bank QR Transfer Payment Box */}
+              {/* ===== PAYMENT METHOD SELECTOR ===== */}
               <div className="rounded-[32px] bg-slate-950/65 border border-slate-800/60 p-6 sm:p-8 backdrop-blur-xl shadow-xl">
-                <h3 className="text-lg font-black text-white flex items-center gap-2.5">
-                  <QrCode size={20} className="text-violet-400" />
-                  Chuyển khoản ngân hàng
+                <h3 className="text-lg font-black text-white flex items-center gap-2.5 mb-1">
+                  <CreditCard size={20} className="text-violet-400" />
+                  Phương thức thanh toán
                 </h3>
-                <p className="text-xs text-slate-500 mt-1">Quét mã QR bằng ứng dụng ngân hàng hoặc chuyển khoản thủ công theo thông tin bên dưới.</p>
-                
-                {/* Styled CSS animation in block */}
-                <style>{`
-                  @keyframes scan {
-                    0%, 100% { top: 4%; }
-                    50% { top: 96%; }
-                  }
-                  .animate-scan {
-                    animation: scan 2.5s ease-in-out infinite;
-                  }
-                `}</style>
-                
-                {/* QR Code Scan Area — Placeholder VietQR-style */}
-                <div className="relative mt-6 mb-8 p-6 rounded-3xl bg-slate-900 border border-slate-800 select-none overflow-hidden max-w-sm mx-auto">
-                  {/* Laser Scan line */}
-                  <div className="absolute left-0 right-0 h-[2.5px] bg-emerald-500 shadow-[0_0_10px_#10b981,0_0_20px_#10b981] animate-scan pointer-events-none" />
-                  
-                  {/* Placeholder VietQR SVG Mock */}
-                  <svg className="w-48 h-48 mx-auto bg-white p-3.5 rounded-2xl shadow-inner border border-slate-200" viewBox="0 0 100 100">
-                    {/* QR corner markers */}
-                    <rect x="5" y="5" width="25" height="25" fill="#1e1b4b" rx="2" />
-                    <rect x="10" y="10" width="15" height="15" fill="white" rx="1" />
-                    <rect x="13" y="13" width="9" height="9" fill="#4f46e5" rx="0.5" />
+                <p className="text-xs text-slate-500 mb-5">Chọn cách thanh toán phù hợp với bạn.</p>
 
-                    <rect x="70" y="5" width="25" height="25" fill="#1e1b4b" rx="2" />
-                    <rect x="75" y="10" width="15" height="15" fill="white" rx="1" />
-                    <rect x="78" y="13" width="9" height="9" fill="#4f46e5" rx="0.5" />
-
-                    <rect x="5" y="70" width="25" height="25" fill="#1e1b4b" rx="2" />
-                    <rect x="10" y="75" width="15" height="15" fill="white" rx="1" />
-                    <rect x="13" y="78" width="9" height="9" fill="#4f46e5" rx="0.5" />
-
-                    {/* Data patterns */}
-                    <path d="M 35 5 H 40 V 10 H 35 Z M 45 5 H 50 V 15 H 45 Z M 55 5 H 65 V 10 H 55 Z M 35 15 H 45 V 20 H 35 Z M 50 15 H 60 V 20 H 50 Z M 60 10 H 65 V 15 H 60 Z M 35 25 H 40 V 30 H 35 Z M 45 25 H 55 V 30 H 45 Z M 60 25 H 65 V 35 H 60 Z" fill="#1e1b4b" />
-                    <path d="M 5 35 H 15 V 40 H 5 Z M 20 35 H 30 V 45 H 20 Z M 35 35 H 40 V 40 H 35 Z M 45 35 H 55 V 45 H 45 Z M 5 45 H 10 V 50 H 5 Z M 15 45 H 20 V 55 H 15 Z M 25 45 H 35 V 50 H 25 Z" fill="#1e1b4b" />
-                    <path d="M 5 55 H 15 V 60 H 5 Z M 20 55 H 25 V 65 H 20 Z M 30 55 H 40 V 60 H 30 Z M 45 55 H 50 V 60 H 45 Z M 55 55 H 65 V 65 H 55 Z M 5 65 H 10 V 70 H 5 Z M 15 65 H 20 V 70 H 15 Z M 25 65 H 30 V 70 H 25 Z M 35 65 H 50 V 70 H 35 Z" fill="#1e1b4b" />
-                    <path d="M 35 75 H 40 V 85 H 35 Z M 45 75 H 55 V 80 H 45 Z M 60 75 H 65 V 85 H 60 Z M 45 85 H 50 V 95 H 45 Z M 55 85 H 65 V 90 H 55 Z M 35 90 H 40 V 95 H 35 Z M 50 90 H 55 V 95 H 50 Z" fill="#1e1b4b" />
-                    <path d="M 75 35 H 85 V 40 H 75 Z M 90 35 H 95 V 45 H 90 Z M 80 45 H 85 V 50 H 80 Z M 70 50 H 75 V 60 H 70 Z M 85 55 H 95 V 60 H 85 Z M 75 60 H 85 V 65 H 75 Z M 90 60 H 95 V 70 H 90 Z" fill="#1e1b4b" />
-                    
-                    {/* Center VietQR logo placeholder */}
-                    <rect x="42" y="42" width="16" height="16" fill="#1e1b4b" rx="3" />
-                    <rect x="44" y="44" width="12" height="12" fill="#4f46e5" rx="2" />
-                    <text x="50" y="53" textAnchor="middle" fill="white" fontSize="7" fontWeight="bold" fontFamily="sans-serif">VN</text>
-                  </svg>
-                  
-                  {/* Scan overlay guide */}
-                  <p className="mt-4 text-[11px] font-bold text-center text-slate-500 uppercase tracking-widest animate-pulse">
-                    Quét mã QR để thanh toán
-                  </p>
+                {/* Tab Buttons */}
+                <div className="grid grid-cols-3 gap-2 mb-6">
+                  {[
+                    { id: "qr", label: "QR Code", icon: <QrCode size={16} /> },
+                    { id: "card", label: "Thẻ ngân hàng", icon: <CreditCard size={16} /> },
+                    { id: "bank", label: "Chuyển khoản", icon: <Landmark size={16} /> },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setPaymentMethod(tab.id)}
+                      className={`flex flex-col items-center gap-1.5 rounded-2xl border px-3 py-3.5 text-xs font-bold transition ${
+                        paymentMethod === tab.id
+                          ? "bg-violet-600/15 border-violet-500/40 text-violet-300 shadow-lg shadow-violet-500/5"
+                          : "bg-slate-900/50 border-slate-800/60 text-slate-500 hover:text-slate-300 hover:border-slate-700"
+                      }`}
+                    >
+                      {tab.icon}
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
 
-                {/* Transfer Info Details — Vietnamese Banking */}
-                <div className="space-y-3.5 bg-slate-900/60 p-5 rounded-2xl border border-slate-800/80 mb-6 text-sm">
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-medium">Ngân hàng</span>
-                    <span className="font-extrabold text-slate-200">Vietcombank (VCB)</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-medium">Chủ tài khoản</span>
-                    <span className="font-bold text-slate-200 uppercase">CONG TY TNHH TICKETRUSH</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-medium">Số tài khoản</span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-slate-200">1234 5678 9012</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText("123456789012");
-                          setToast({ type: "success", message: "Đã sao chép số tài khoản!" });
-                        }}
-                        className="text-[10px] font-extrabold text-violet-400 hover:text-violet-300 hover:underline px-2 py-0.5 rounded bg-slate-800 border border-slate-700"
-                      >
-                        Sao chép
-                      </button>
+                {/* QR Code Tab */}
+                {paymentMethod === "qr" && (
+                  <div>
+                    <style>{`
+                      @keyframes scan {
+                        0%, 100% { top: 4%; }
+                        50% { top: 96%; }
+                      }
+                      .animate-scan {
+                        animation: scan 2.5s ease-in-out infinite;
+                      }
+                    `}</style>
+
+                    <div className="relative p-6 rounded-3xl bg-slate-900 border border-slate-800 select-none overflow-hidden max-w-xs mx-auto">
+                      <div className="absolute left-0 right-0 h-[2.5px] bg-emerald-500 shadow-[0_0_10px_#10b981,0_0_20px_#10b981] animate-scan pointer-events-none" />
+                      <svg className="w-44 h-44 mx-auto bg-white p-3 rounded-2xl shadow-inner border border-slate-200" viewBox="0 0 100 100">
+                        <rect x="5" y="5" width="25" height="25" fill="#1e1b4b" rx="2" />
+                        <rect x="10" y="10" width="15" height="15" fill="white" rx="1" />
+                        <rect x="13" y="13" width="9" height="9" fill="#4f46e5" rx="0.5" />
+                        <rect x="70" y="5" width="25" height="25" fill="#1e1b4b" rx="2" />
+                        <rect x="75" y="10" width="15" height="15" fill="white" rx="1" />
+                        <rect x="78" y="13" width="9" height="9" fill="#4f46e5" rx="0.5" />
+                        <rect x="5" y="70" width="25" height="25" fill="#1e1b4b" rx="2" />
+                        <rect x="10" y="75" width="15" height="15" fill="white" rx="1" />
+                        <rect x="13" y="78" width="9" height="9" fill="#4f46e5" rx="0.5" />
+                        <path d="M 35 5 H 40 V 10 H 35 Z M 45 5 H 50 V 15 H 45 Z M 55 5 H 65 V 10 H 55 Z M 35 15 H 45 V 20 H 35 Z M 50 15 H 60 V 20 H 50 Z M 60 10 H 65 V 15 H 60 Z M 35 25 H 40 V 30 H 35 Z M 45 25 H 55 V 30 H 45 Z M 60 25 H 65 V 35 H 60 Z" fill="#1e1b4b" />
+                        <path d="M 5 35 H 15 V 40 H 5 Z M 20 35 H 30 V 45 H 20 Z M 35 35 H 40 V 40 H 35 Z M 45 35 H 55 V 45 H 45 Z M 5 45 H 10 V 50 H 5 Z M 15 45 H 20 V 55 H 15 Z M 25 45 H 35 V 50 H 25 Z" fill="#1e1b4b" />
+                        <path d="M 5 55 H 15 V 60 H 5 Z M 20 55 H 25 V 65 H 20 Z M 30 55 H 40 V 60 H 30 Z M 45 55 H 50 V 60 H 45 Z M 55 55 H 65 V 65 H 55 Z M 5 65 H 10 V 70 H 5 Z M 15 65 H 20 V 70 H 15 Z" fill="#1e1b4b" />
+                        <path d="M 35 75 H 40 V 85 H 35 Z M 45 75 H 55 V 80 H 45 Z M 60 75 H 65 V 85 H 60 Z M 45 85 H 50 V 95 H 45 Z M 55 85 H 65 V 90 H 55 Z" fill="#1e1b4b" />
+                        <path d="M 75 35 H 85 V 40 H 75 Z M 90 35 H 95 V 45 H 90 Z M 80 45 H 85 V 50 H 80 Z M 70 50 H 75 V 60 H 70 Z M 85 55 H 95 V 60 H 85 Z M 75 60 H 85 V 65 H 75 Z" fill="#1e1b4b" />
+                        <rect x="42" y="42" width="16" height="16" fill="#1e1b4b" rx="3" />
+                        <rect x="44" y="44" width="12" height="12" fill="#4f46e5" rx="2" />
+                        <text x="50" y="53" textAnchor="middle" fill="white" fontSize="7" fontWeight="bold" fontFamily="sans-serif">VN</text>
+                      </svg>
+                      <p className="mt-4 text-[11px] font-bold text-center text-slate-500 uppercase tracking-widest animate-pulse">
+                        Quét mã QR để thanh toán
+                      </p>
+                    </div>
+
+                    <div className="space-y-3 bg-slate-900/60 p-4 rounded-2xl border border-slate-800/80 mt-5 text-sm">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 font-medium">Ngân hàng</span>
+                        <span className="font-extrabold text-slate-200">Vietcombank (VCB)</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 font-medium">Số tiền</span>
+                        <span className="font-mono font-black text-green-400">{currencyFormatter.format(total)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 font-medium">Nội dung CK</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-violet-300 bg-violet-950/40 border border-violet-800/40 px-2 py-0.5 rounded text-xs">
+                            TR{eventId}S{selectedSeats.map(s => s.seatLabel || s.label || s.id).join("")}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const msg = `TR${eventId}S${selectedSeats.map(s => s.seatLabel || s.label || s.id).join("")}`;
+                              navigator.clipboard.writeText(msg);
+                              setToast({ type: "success", message: "Đã sao chép!" });
+                            }}
+                            className="text-[10px] font-extrabold text-violet-400 hover:text-violet-300 px-2 py-0.5 rounded bg-slate-800 border border-slate-700"
+                          >
+                            Sao chép
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-medium">Số tiền</span>
-                    <span className="font-mono font-black text-green-400">{currencyFormatter.format(total)}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-medium">Nội dung CK</span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-violet-300 bg-violet-950/40 border border-violet-800/40 px-2 py-0.5 rounded">
-                        TR{eventId}S{selectedSeats.map(s => s.seatLabel || s.label || s.id).join("")}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const msg = `TR${eventId}S${selectedSeats.map(s => s.seatLabel || s.label || s.id).join("")}`;
-                          navigator.clipboard.writeText(msg);
-                          setToast({ type: "success", message: "Đã sao chép nội dung chuyển khoản!" });
-                        }}
-                        className="text-[10px] font-extrabold text-violet-400 hover:text-violet-300 hover:underline px-2 py-0.5 rounded bg-slate-800 border border-slate-700"
-                      >
-                        Sao chép
-                      </button>
+                )}
+
+                {/* Card Payment Tab */}
+                {paymentMethod === "card" && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-2">Số thẻ</label>
+                      <input
+                        type="text"
+                        placeholder="0000  0000  0000  0000"
+                        maxLength={19}
+                        className="w-full bg-slate-900 border border-slate-800 focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 rounded-2xl px-4 py-3.5 text-sm text-slate-100 outline-none transition font-mono tracking-widest placeholder-slate-700"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-2">Ngày hết hạn</label>
+                        <input
+                          type="text"
+                          placeholder="MM / YY"
+                          maxLength={7}
+                          className="w-full bg-slate-900 border border-slate-800 focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 rounded-2xl px-4 py-3.5 text-sm text-slate-100 outline-none transition font-mono placeholder-slate-700"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-2">CVV</label>
+                        <input
+                          type="password"
+                          placeholder="•••"
+                          maxLength={4}
+                          className="w-full bg-slate-900 border border-slate-800 focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 rounded-2xl px-4 py-3.5 text-sm text-slate-100 outline-none transition font-mono placeholder-slate-700"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-2">Tên trên thẻ</label>
+                      <input
+                        type="text"
+                        placeholder="NGUYEN VAN A"
+                        className="w-full bg-slate-900 border border-slate-800 focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 rounded-2xl px-4 py-3.5 text-sm text-slate-100 outline-none transition uppercase placeholder-slate-700"
+                      />
+                    </div>
+                    <div className="flex items-center gap-3 pt-2 text-xs text-slate-500">
+                      <ShieldCheck size={14} className="text-green-500" />
+                      <span>Thông tin thẻ được bảo mật bằng mã hóa SSL 256-bit</span>
                     </div>
                   </div>
-                </div>
+                )}
 
+                {/* Manual Bank Transfer Tab */}
+                {paymentMethod === "bank" && (
+                  <div className="space-y-3.5 bg-slate-900/60 p-5 rounded-2xl border border-slate-800/80 text-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 font-medium">Ngân hàng</span>
+                      <span className="font-extrabold text-slate-200">Vietcombank (VCB)</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 font-medium">Chi nhánh</span>
+                      <span className="font-bold text-slate-300">Hồ Chí Minh</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 font-medium">Chủ tài khoản</span>
+                      <span className="font-bold text-slate-200 uppercase">CONG TY TNHH TICKETRUSH</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 font-medium">Số tài khoản</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-slate-200">1234 5678 9012</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText("123456789012");
+                            setToast({ type: "success", message: "Đã sao chép số tài khoản!" });
+                          }}
+                          className="text-[10px] font-extrabold text-violet-400 hover:text-violet-300 px-2 py-0.5 rounded bg-slate-800 border border-slate-700"
+                        >
+                          Sao chép
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 font-medium">Số tiền</span>
+                      <span className="font-mono font-black text-green-400">{currencyFormatter.format(total)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 font-medium">Nội dung CK</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-violet-300 bg-violet-950/40 border border-violet-800/40 px-2 py-0.5 rounded text-xs">
+                          TR{eventId}S{selectedSeats.map(s => s.seatLabel || s.label || s.id).join("")}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const msg = `TR${eventId}S${selectedSeats.map(s => s.seatLabel || s.label || s.id).join("")}`;
+                            navigator.clipboard.writeText(msg);
+                            setToast({ type: "success", message: "Đã sao chép nội dung CK!" });
+                          }}
+                          className="text-[10px] font-extrabold text-violet-400 hover:text-violet-300 px-2 py-0.5 rounded bg-slate-800 border border-slate-700"
+                        >
+                          Sao chép
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-                <form onSubmit={handlePayNow} className="space-y-4">
-                  {/* Pricing Breakdown */}
+                {/* ===== PRICING BREAKDOWN & PAY BUTTON ===== */}
+                <form onSubmit={handlePayNow} className="mt-6 space-y-4">
                   <div className="pt-4 border-t border-slate-800/80 space-y-3">
                     <div className="flex items-center justify-between text-sm text-slate-400">
                       <span>Tạm tính</span>
@@ -694,14 +791,22 @@ export default function CheckoutPage() {
                   <button
                     type="submit"
                     disabled={isCheckoutLoading}
-                    className="mt-6 w-full flex justify-center items-center rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-4 text-sm font-extrabold text-white shadow-xl shadow-violet-500/20 transition duration-200 hover:from-violet-500 hover:to-indigo-500 hover:-translate-y-0.5 hover:shadow-violet-500/30 disabled:opacity-40 disabled:pointer-events-none"
+                    className="mt-4 w-full flex justify-center items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-4 text-sm font-extrabold text-white shadow-xl shadow-violet-500/20 transition duration-200 hover:from-violet-500 hover:to-indigo-500 hover:-translate-y-0.5 hover:shadow-violet-500/30 disabled:opacity-40 disabled:pointer-events-none"
                   >
                     {isCheckoutLoading ? (
                       <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
                     ) : (
-                      "Tôi đã chuyển khoản"
+                      <>
+                        <ShieldCheck size={16} />
+                        {paymentMethod === "qr" ? "Tôi đã quét QR & chuyển khoản" : paymentMethod === "card" ? "Thanh toán bằng thẻ" : "Tôi đã chuyển khoản"}
+                      </>
                     )}
                   </button>
+
+                  <p className="text-center text-[10px] text-slate-600 flex items-center justify-center gap-1.5">
+                    <ShieldCheck size={10} />
+                    Giao dịch được bảo mật. Vé điện tử sẽ được gửi qua email.
+                  </p>
                 </form>
               </div>
 
