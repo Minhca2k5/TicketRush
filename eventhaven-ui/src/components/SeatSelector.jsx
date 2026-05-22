@@ -475,9 +475,20 @@ export function SeatSelector({ eventId, event, isPending = false, initialSeats, 
   }, [liveSeats]);
 
   useEffect(() => {
-    if (appliedCoupon && selectedSeats.length > 0) {
+    if (selectedSeats.length === 0) {
+      setAppliedCoupon(null);
+      setCouponCode("");
+      setCouponError("");
+      return undefined;
+    }
+
+    if (!appliedCoupon) return undefined;
+
+    let ignore = false;
+    const timer = window.setTimeout(() => {
       validateCoupon(couponCode, total)
         .then((response) => {
+          if (ignore) return;
           if (response.success && response.data?.valid) {
             setAppliedCoupon(response.data);
           } else {
@@ -486,13 +497,14 @@ export function SeatSelector({ eventId, event, isPending = false, initialSeats, 
           }
         })
         .catch(() => {
-          setAppliedCoupon(null);
+          if (!ignore) setAppliedCoupon(null);
         });
-    } else if (selectedSeats.length === 0) {
-      setAppliedCoupon(null);
-      setCouponCode("");
-      setCouponError("");
-    }
+    }, 500);
+
+    return () => {
+      ignore = true;
+      window.clearTimeout(timer);
+    };
   }, [total, selectedSeats.length]);
 
   useEffect(() => {
