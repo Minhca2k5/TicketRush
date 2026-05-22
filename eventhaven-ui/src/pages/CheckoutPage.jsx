@@ -8,9 +8,9 @@ import { parseLockExpiresAt } from "../lib/seat-types";
 import { getAccountHolderId, getStoredHolderId, setStoredHolderId } from "../lib/holder";
 import { readStoredSelection, writeStoredSelection } from "../lib/selection-storage";
 
-const currencyFormatter = new Intl.NumberFormat("en-US", {
+const currencyFormatter = new Intl.NumberFormat("vi-VN", {
   style: "currency",
-  currency: "USD",
+  currency: "VND",
   maximumFractionDigits: 0,
 });
 
@@ -564,8 +564,9 @@ export default function CheckoutPage() {
               <div className="rounded-[32px] bg-slate-950/65 border border-slate-800/60 p-6 sm:p-8 backdrop-blur-xl shadow-xl">
                 <h3 className="text-lg font-black text-white flex items-center gap-2.5">
                   <QrCode size={20} className="text-violet-400" />
-                  Bank QR Payment
+                  Chuyển khoản ngân hàng
                 </h3>
+                <p className="text-xs text-slate-500 mt-1">Quét mã QR bằng ứng dụng ngân hàng hoặc chuyển khoản thủ công theo thông tin bên dưới.</p>
                 
                 {/* Styled CSS animation in block */}
                 <style>{`
@@ -578,13 +579,14 @@ export default function CheckoutPage() {
                   }
                 `}</style>
                 
-                {/* QR Code Scan Area */}
+                {/* QR Code Scan Area — Placeholder VietQR-style */}
                 <div className="relative mt-6 mb-8 p-6 rounded-3xl bg-slate-900 border border-slate-800 select-none overflow-hidden max-w-sm mx-auto">
                   {/* Laser Scan line */}
                   <div className="absolute left-0 right-0 h-[2.5px] bg-emerald-500 shadow-[0_0_10px_#10b981,0_0_20px_#10b981] animate-scan pointer-events-none" />
                   
-                  {/* Bank QR SVG Mock */}
+                  {/* Placeholder VietQR SVG Mock */}
                   <svg className="w-48 h-48 mx-auto bg-white p-3.5 rounded-2xl shadow-inner border border-slate-200" viewBox="0 0 100 100">
+                    {/* QR corner markers */}
                     <rect x="5" y="5" width="25" height="25" fill="#1e1b4b" rx="2" />
                     <rect x="10" y="10" width="15" height="15" fill="white" rx="1" />
                     <rect x="13" y="13" width="9" height="9" fill="#4f46e5" rx="0.5" />
@@ -597,59 +599,57 @@ export default function CheckoutPage() {
                     <rect x="10" y="75" width="15" height="15" fill="white" rx="1" />
                     <rect x="13" y="78" width="9" height="9" fill="#4f46e5" rx="0.5" />
 
-                    <rect x="70" y="70" width="10" height="10" fill="#1e1b4b" rx="1" />
-                    <rect x="72" y="72" width="6" height="6" fill="white" rx="0.5" />
-                    <rect x="74" y="74" width="2" height="2" fill="#4f46e5" />
-
+                    {/* Data patterns */}
                     <path d="M 35 5 H 40 V 10 H 35 Z M 45 5 H 50 V 15 H 45 Z M 55 5 H 65 V 10 H 55 Z M 35 15 H 45 V 20 H 35 Z M 50 15 H 60 V 20 H 50 Z M 60 10 H 65 V 15 H 60 Z M 35 25 H 40 V 30 H 35 Z M 45 25 H 55 V 30 H 45 Z M 60 25 H 65 V 35 H 60 Z" fill="#1e1b4b" />
                     <path d="M 5 35 H 15 V 40 H 5 Z M 20 35 H 30 V 45 H 20 Z M 35 35 H 40 V 40 H 35 Z M 45 35 H 55 V 45 H 45 Z M 5 45 H 10 V 50 H 5 Z M 15 45 H 20 V 55 H 15 Z M 25 45 H 35 V 50 H 25 Z" fill="#1e1b4b" />
                     <path d="M 5 55 H 15 V 60 H 5 Z M 20 55 H 25 V 65 H 20 Z M 30 55 H 40 V 60 H 30 Z M 45 55 H 50 V 60 H 45 Z M 55 55 H 65 V 65 H 55 Z M 5 65 H 10 V 70 H 5 Z M 15 65 H 20 V 70 H 15 Z M 25 65 H 30 V 70 H 25 Z M 35 65 H 50 V 70 H 35 Z" fill="#1e1b4b" />
                     <path d="M 35 75 H 40 V 85 H 35 Z M 45 75 H 55 V 80 H 45 Z M 60 75 H 65 V 85 H 60 Z M 45 85 H 50 V 95 H 45 Z M 55 85 H 65 V 90 H 55 Z M 35 90 H 40 V 95 H 35 Z M 50 90 H 55 V 95 H 50 Z" fill="#1e1b4b" />
                     <path d="M 75 35 H 85 V 40 H 75 Z M 90 35 H 95 V 45 H 90 Z M 80 45 H 85 V 50 H 80 Z M 70 50 H 75 V 60 H 70 Z M 85 55 H 95 V 60 H 85 Z M 75 60 H 85 V 65 H 75 Z M 90 60 H 95 V 70 H 90 Z" fill="#1e1b4b" />
                     
+                    {/* Center VietQR logo placeholder */}
                     <rect x="42" y="42" width="16" height="16" fill="#1e1b4b" rx="3" />
                     <rect x="44" y="44" width="12" height="12" fill="#4f46e5" rx="2" />
-                    <path d="M 47 47 H 53 V 49 H 51 V 53 H 49 V 49 H 47 Z" fill="white" />
+                    <text x="50" y="53" textAnchor="middle" fill="white" fontSize="7" fontWeight="bold" fontFamily="sans-serif">VN</text>
                   </svg>
                   
                   {/* Scan overlay guide */}
                   <p className="mt-4 text-[11px] font-bold text-center text-slate-500 uppercase tracking-widest animate-pulse">
-                    Scan to Pay
+                    Quét mã QR để thanh toán
                   </p>
                 </div>
 
-                {/* Transfer Info Details */}
+                {/* Transfer Info Details — Vietnamese Banking */}
                 <div className="space-y-3.5 bg-slate-900/60 p-5 rounded-2xl border border-slate-800/80 mb-6 text-sm">
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-medium">Bank</span>
-                    <span className="font-extrabold text-slate-200">TicketRush Dev Bank</span>
+                    <span className="text-slate-500 font-medium">Ngân hàng</span>
+                    <span className="font-extrabold text-slate-200">Vietcombank (VCB)</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-medium">Account Name</span>
-                    <span className="font-bold text-slate-200 uppercase">TicketRush Co., Ltd</span>
+                    <span className="text-slate-500 font-medium">Chủ tài khoản</span>
+                    <span className="font-bold text-slate-200 uppercase">CONG TY TNHH TICKETRUSH</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-medium">Account Number</span>
+                    <span className="text-slate-500 font-medium">Số tài khoản</span>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-slate-200">9999-8888-7777</span>
+                      <span className="font-mono font-bold text-slate-200">1234 5678 9012</span>
                       <button
                         type="button"
                         onClick={() => {
-                          navigator.clipboard.writeText("999988887777");
-                          setToast({ type: "success", message: "Account number copied!" });
+                          navigator.clipboard.writeText("123456789012");
+                          setToast({ type: "success", message: "Đã sao chép số tài khoản!" });
                         }}
-                        className="text-[10px] font-extrabold text-violet-400 hover:text-violet-300 hover:underline px-2 py-0.5 rounded bg-slate-850 border border-slate-850"
+                        className="text-[10px] font-extrabold text-violet-400 hover:text-violet-300 hover:underline px-2 py-0.5 rounded bg-slate-800 border border-slate-700"
                       >
-                        Copy
+                        Sao chép
                       </button>
                     </div>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-medium">Amount</span>
+                    <span className="text-slate-500 font-medium">Số tiền</span>
                     <span className="font-mono font-black text-green-400">{currencyFormatter.format(total)}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-medium">Transfer Message</span>
+                    <span className="text-slate-500 font-medium">Nội dung CK</span>
                     <div className="flex items-center gap-2">
                       <span className="font-mono font-bold text-violet-300 bg-violet-950/40 border border-violet-800/40 px-2 py-0.5 rounded">
                         TR{eventId}S{selectedSeats.map(s => s.seatLabel || s.label || s.id).join("")}
@@ -659,11 +659,11 @@ export default function CheckoutPage() {
                         onClick={() => {
                           const msg = `TR${eventId}S${selectedSeats.map(s => s.seatLabel || s.label || s.id).join("")}`;
                           navigator.clipboard.writeText(msg);
-                          setToast({ type: "success", message: "Transfer message copied!" });
+                          setToast({ type: "success", message: "Đã sao chép nội dung chuyển khoản!" });
                         }}
-                        className="text-[10px] font-extrabold text-violet-400 hover:text-violet-300 hover:underline px-2 py-0.5 rounded bg-slate-850 border border-slate-850"
+                        className="text-[10px] font-extrabold text-violet-400 hover:text-violet-300 hover:underline px-2 py-0.5 rounded bg-slate-800 border border-slate-700"
                       >
-                        Copy
+                        Sao chép
                       </button>
                     </div>
                   </div>
@@ -674,19 +674,19 @@ export default function CheckoutPage() {
                   {/* Pricing Breakdown */}
                   <div className="pt-4 border-t border-slate-800/80 space-y-3">
                     <div className="flex items-center justify-between text-sm text-slate-400">
-                      <span>Seat Subtotal</span>
+                      <span>Tạm tính</span>
                       <span>{currencyFormatter.format(subtotal)}</span>
                     </div>
 
                     {appliedCoupon && (
                       <div className="flex items-center justify-between text-sm text-green-400 font-semibold">
-                        <span>Coupon Discount ({appliedCoupon.code})</span>
+                        <span>Giảm giá ({appliedCoupon.code})</span>
                         <span>-{currencyFormatter.format(discount)}</span>
                       </div>
                     )}
 
                     <div className="flex items-center justify-between text-base font-black text-white pt-3 border-t border-slate-800/60">
-                      <span>Total Amount</span>
+                      <span>Tổng cộng</span>
                       <span className="text-xl text-violet-400">{currencyFormatter.format(total)}</span>
                     </div>
                   </div>
@@ -699,7 +699,7 @@ export default function CheckoutPage() {
                     {isCheckoutLoading ? (
                       <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
                     ) : (
-                      "I Have Transferred"
+                      "Tôi đã chuyển khoản"
                     )}
                   </button>
                 </form>
