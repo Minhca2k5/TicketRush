@@ -7,12 +7,7 @@ import { mapSeatLayoutToType, mapSeatsToType } from '@/lib/seat-types';
 import { getEventById, getEventReviews, getSeatLayout, getSeatMap, submitEventReview } from '../services/eventService';
 import { getProfile } from '../services/authService';
 import { isEventPast, isEventPending } from '../lib/event-status';
-
-function getAccountHolderId(profile) {
-  if (profile?.id) return `user-${profile.id}`;
-  if (profile?.username) return `user-${profile.username}`;
-  return null;
-}
+import { getAccountHolderId } from '../lib/holder';
 
 function RatingStars({ value, onChange, interactive = false }) {
   return (

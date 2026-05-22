@@ -6,13 +6,7 @@ import { getProfile } from '../services/authService';
 import { getEventById } from '../services/eventService';
 import { isEventPast } from '../lib/event-status';
 import { readUserSettings } from '../lib/userSettings';
-
-const HOLDER_STORAGE_KEY = "ticketrush-seat-holder";
-function getAccountHolderId(profile) {
-  if (profile?.id) return `user-${profile.id}`;
-  if (profile?.username) return `user-${profile.username}`;
-  return null;
-}
+import { getAccountHolderId, getStoredHolderId } from '../lib/holder';
 
 function TicketModal({ order, onClose }) {
   if (!order) return null;
@@ -75,7 +69,7 @@ export default function OrderHistory() {
       try {
         const profile = await getProfile();
         setCompactTickets(readUserSettings(profile).compactTickets);
-        const userId = getAccountHolderId(profile) || window.localStorage.getItem(HOLDER_STORAGE_KEY);
+        const userId = getAccountHolderId(profile) || getStoredHolderId();
         if (!userId) return;
 
         const res = await getUserOrders(userId);

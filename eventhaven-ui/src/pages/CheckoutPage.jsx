@@ -5,45 +5,14 @@ import { getEventById } from "../services/eventService";
 import { checkout, validateCoupon, releaseSeat } from "../services/bookingService";
 import { getProfile } from "../services/authService";
 import { parseLockExpiresAt } from "../lib/seat-types";
-
-const SELECTION_STORAGE_PREFIX = "ticketrush-seat-selection";
-const HOLDER_STORAGE_KEY = "ticketrush-seat-holder";
+import { getAccountHolderId, getStoredHolderId, setStoredHolderId } from "../lib/holder";
+import { readStoredSelection, writeStoredSelection } from "../lib/selection-storage";
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
   maximumFractionDigits: 0,
 });
-
-function getSelectionStorageKey(eventId, holderId) {
-  return `${SELECTION_STORAGE_PREFIX}:${eventId}:${holderId}`;
-}
-
-function readStoredSelection(eventId, holderId) {
-  if (!eventId || !holderId) return null;
-  try {
-    const stored = window.localStorage.getItem(getSelectionStorageKey(eventId, holderId));
-    return stored ? JSON.parse(stored) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredSelection(eventId, holderId, payload) {
-  if (!eventId || !holderId) return;
-  const key = getSelectionStorageKey(eventId, holderId);
-  if (!payload?.selectedSeatIds?.length) {
-    window.localStorage.removeItem(key);
-    return;
-  }
-  window.localStorage.setItem(key, JSON.stringify(payload));
-}
-
-function getAccountHolderId(profile) {
-  if (profile?.id) return `user-${profile.id}`;
-  if (profile?.username) return `user-${profile.username}`;
-  return null;
-}
 
 export default function CheckoutPage() {
   const { id: eventIdStr } = useParams();
@@ -96,16 +65,16 @@ export default function CheckoutPage() {
         const accountHolderId = getAccountHolderId(profile);
         if (accountHolderId) {
           setHolderId(accountHolderId);
-          window.localStorage.setItem(HOLDER_STORAGE_KEY, accountHolderId);
+          setStoredHolderId(accountHolderId);
         } else {
           // Fallback to local storage anonymous holder key
-          const localHolder = window.localStorage.getItem(HOLDER_STORAGE_KEY);
+          const localHolder = getStoredHolderId();
           if (localHolder) setHolderId(localHolder);
         }
       })
       .catch(() => {
         if (!isActive) return;
-        const localHolder = window.localStorage.getItem(HOLDER_STORAGE_KEY);
+        const localHolder = getStoredHolderId();
         if (localHolder) setHolderId(localHolder);
       });
 

@@ -14,33 +14,16 @@ import { getProfile } from "../services/authService";
 import { readUserSettings } from "../lib/userSettings";
 import SeatMapRenderer from "./seat-map/SeatMapRenderer";
 import { openSeatMapSocket } from "../services/seatRealtimeService";
+import { getAccountHolderId, getOrCreateHolderId, HOLDER_STORAGE_KEY, setStoredHolderId } from "../lib/holder";
+import { readStoredSelection, writeStoredSelection } from "../lib/selection-storage";
 
 const HOLD_MINUTES = 10;
 const POLL_INTERVAL_IDLE_MS = 5000;
 const POLL_INTERVAL_ACTIVE_MS = 3000;
 const REALTIME_RECONNECT_MS = 2500;
 const REALTIME_REFRESH_DEBOUNCE_MS = 150;
-const HOLDER_STORAGE_KEY = "ticketrush-seat-holder";
-const SELECTION_STORAGE_PREFIX = "ticketrush-seat-selection";
 const PENDING_PREVIEW_TOAST_MESSAGE = "Sự kiện đang ở trạng thái chờ mở bán. Bạn hiện chỉ có thể xem trước sơ đồ ghế!";
 const CONFLICT_TOAST_MESSAGE = "Ghế này vừa có người đặt, vui lòng chọn ghế khác";
-
-function getOrCreateHolderId() {
-  const existing = window.localStorage.getItem(HOLDER_STORAGE_KEY);
-  if (existing) {
-    return existing;
-  }
-
-  const generated = `holder-${crypto.randomUUID()}`;
-  window.localStorage.setItem(HOLDER_STORAGE_KEY, generated);
-  return generated;
-}
-
-function getAccountHolderId(profile) {
-  if (profile?.id) return `user-${profile.id}`;
-  if (profile?.username) return `user-${profile.username}`;
-  return null;
-}
 
 function normalizeCanvasSeatStatus(status) {
   const normalized = String(status || "").trim().toUpperCase();
@@ -76,33 +59,6 @@ function toBookingSeat(layoutSeat, zone, tier) {
 
 function resolveZoneName(seat, fallback = "General") {
   return seat?.zoneName || seat?.zoneTitle || seat?.venueZone?.name || seat?.zone || fallback;
-}
-
-function getSelectionStorageKey(eventId, holderId) {
-  return `${SELECTION_STORAGE_PREFIX}:${eventId}:${holderId}`;
-}
-
-function readStoredSelection(eventId, holderId) {
-  if (!eventId || !holderId) return null;
-
-  try {
-    const stored = window.localStorage.getItem(getSelectionStorageKey(eventId, holderId));
-    return stored ? JSON.parse(stored) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredSelection(eventId, holderId, payload) {
-  if (!eventId || !holderId) return;
-
-  const key = getSelectionStorageKey(eventId, holderId);
-  if (!payload?.selectedSeatIds?.length) {
-    window.localStorage.removeItem(key);
-    return;
-  }
-
-  window.localStorage.setItem(key, JSON.stringify(payload));
 }
 
 function getSelectionExpirationTime(selectedSeats) {
@@ -230,7 +186,7 @@ export function SeatSelector({ eventId, event, isPending = false, initialSeats, 
         }
 
         holderIdRef.current = accountHolderId;
-        window.localStorage.setItem(HOLDER_STORAGE_KEY, accountHolderId);
+        setStoredHolderId(accountHolderId);
         setIsProfileLoaded(true);
       })
       .catch(() => {
