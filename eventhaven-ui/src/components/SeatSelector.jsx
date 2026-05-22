@@ -436,21 +436,22 @@ export function SeatSelector({ eventId, event, isPending = false, initialSeats, 
 
   useEffect(() => {
     // Detect changed seats for visual flash
-    setChangedSeatIds((prev) => {
-      const changed = liveSeats
-        .filter((seat) => {
-          const oldSeat = selectedSeatsRef.current.find((s) => s.id === seat.id);
-          return oldSeat && oldSeat.status !== seat.status;
-        })
-        .map((s) => s.id);
-      return changed;
-    });
+    const changed = liveSeats
+      .filter((seat) => {
+        const oldSeat = selectedSeatsRef.current.find((s) => s.id === seat.id);
+        return oldSeat && oldSeat.status !== seat.status;
+      })
+      .map((s) => s.id);
+
+    setChangedSeatIds(changed);
+
     // Clear flash after animation
-    if (changedSeatIds.length) {
-      const timer = setTimeout(() => setChangedSeatIds([]), 1200);
-      return () => clearTimeout(timer);
+    let flashTimer;
+    if (changed.length) {
+      flashTimer = setTimeout(() => setChangedSeatIds([]), 1200);
     }
 
+    // Always prune seats that are no longer available
     setSelectedSeats((previous) => {
       const retainableSeatIds = new Set(
         liveSeats
@@ -467,6 +468,10 @@ export function SeatSelector({ eventId, event, isPending = false, initialSeats, 
       }
       return nextSelection;
     });
+
+    return () => {
+      if (flashTimer) clearTimeout(flashTimer);
+    };
   }, [liveSeats]);
 
   useEffect(() => {
