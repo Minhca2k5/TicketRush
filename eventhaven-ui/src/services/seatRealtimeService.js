@@ -1,9 +1,12 @@
 import { getApiOrigin } from './api';
+import { getAuthToken } from '../lib/auth';
 
 export function getSeatMapWebSocketUrl(eventId) {
   const apiOrigin = getApiOrigin();
   const wsOrigin = apiOrigin.replace(/^http/i, apiOrigin.startsWith('https') ? 'wss' : 'ws');
-  return `${wsOrigin}/ws/events/${encodeURIComponent(eventId)}/seats`;
+  const baseUrl = `${wsOrigin}/ws/events/${encodeURIComponent(eventId)}/seats`;
+  const token = getAuthToken();
+  return token ? `${baseUrl}?token=${encodeURIComponent(token)}` : baseUrl;
 }
 
 export function openSeatMapSocket(eventId, handlers = {}) {
