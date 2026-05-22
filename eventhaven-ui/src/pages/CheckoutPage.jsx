@@ -689,16 +689,6 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                {/* Dev Option Guideline */}
-                <div className="mb-6 rounded-2xl bg-violet-950/20 border border-violet-800/20 p-4 text-xs text-violet-300/80 flex items-start gap-3">
-                  <div className="mt-0.5 flex shrink-0 h-4 w-4 items-center justify-center rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20 font-black">
-                    !
-                  </div>
-                  <div>
-                    <span className="font-black text-violet-400 uppercase tracking-wider block mb-1">Developer Scan Simulation</span>
-                    Press the <kbd className="bg-slate-900 border border-slate-700 text-slate-300 px-1.5 py-0.5 rounded font-mono text-[10px] font-extrabold">\</kbd> key on your keyboard to instantly simulate and approve the payment scan.
-                  </div>
-                </div>
 
                 <form onSubmit={handlePayNow} className="space-y-4">
                   {/* Pricing Breakdown */}
